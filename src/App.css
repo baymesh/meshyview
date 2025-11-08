@@ -728,6 +728,15 @@ body {
   border: 1px solid var(--border-color);
 }
 
+/* Make historical position markers more subtle */
+.historical-marker {
+  opacity: 0.6;
+}
+
+.historical-marker:hover {
+  opacity: 1;
+}
+
 .packets-table-container {
   overflow-x: auto;
 }

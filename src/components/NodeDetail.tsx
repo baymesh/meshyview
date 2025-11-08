@@ -21,9 +21,22 @@ const DefaultIcon = L.icon({
   shadowSize: [41, 41]
 });
 
+// Create a more subtle icon for historical positions
+const HistoricalIcon = L.icon({
+  iconUrl: icon,
+  iconRetinaUrl: iconRetina,
+  shadowUrl: iconShadow,
+  iconSize: [15, 24],  // Smaller than default
+  iconAnchor: [7, 24],
+  popupAnchor: [1, -20],
+  shadowSize: [24, 24],
+  className: 'historical-marker'
+});
+
 L.Marker.prototype.options.icon = DefaultIcon;
 
 const COORDINATE_SCALE_FACTOR = 10000000;
+const POSITION_PORTNUM = 3;
 
 interface NodeDetailProps {
   nodeId: string;
@@ -48,12 +61,80 @@ interface Packet {
   payload_hex?: string;
 }
 
+interface HistoricalPosition {
+  lat: number;
+  lng: number;
+  packets: Array<{
+    id: number;
+    timestamp: string;
+  }>;
+}
+
+// Helper function to extract position from packet payload
+function extractPosition(packet: Packet): { lat: number; lng: number } | null {
+  if (packet.portnum !== POSITION_PORTNUM) {
+    return null;
+  }
+  
+  const payload = packet.payload;
+  if (typeof payload === 'object' && payload !== null) {
+    // Check for latitude_i and longitude_i (scaled integers)
+    if ('latitude_i' in payload && 'longitude_i' in payload) {
+      const lat = typeof payload.latitude_i === 'number' ? payload.latitude_i / COORDINATE_SCALE_FACTOR : null;
+      const lng = typeof payload.longitude_i === 'number' ? payload.longitude_i / COORDINATE_SCALE_FACTOR : null;
+      if (lat !== null && lng !== null && lat !== 0 && lng !== 0) {
+        return { lat, lng };
+      }
+    }
+    // Check for direct lat/lng fields
+    if ('latitude' in payload && 'longitude' in payload) {
+      const lat = typeof payload.latitude === 'number' ? payload.latitude : null;
+      const lng = typeof payload.longitude === 'number' ? payload.longitude : null;
+      if (lat !== null && lng !== null && lat !== 0 && lng !== 0) {
+        return { lat, lng };
+      }
+    }
+  }
+  
+  return null;
+}
+
+// Helper function to group positions by location
+function groupPositionsByLocation(packets: Packet[]): HistoricalPosition[] {
+  const locationMap = new Map<string, HistoricalPosition>();
+  
+  for (const packet of packets) {
+    const position = extractPosition(packet);
+    if (!position) continue;
+    
+    // Round to 6 decimal places (~0.1m precision) for grouping
+    const lat = Math.round(position.lat * 1000000) / 1000000;
+    const lng = Math.round(position.lng * 1000000) / 1000000;
+    const key = `${lat},${lng}`;
+    
+    const timestamp = packet.timestamp || packet.import_time || '';
+    
+    if (locationMap.has(key)) {
+      locationMap.get(key)!.packets.push({ id: packet.id, timestamp });
+    } else {
+      locationMap.set(key, {
+        lat,
+        lng,
+        packets: [{ id: packet.id, timestamp }]
+      });
+    }
+  }
+  
+  return Array.from(locationMap.values());
+}
+
 export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeClick, onChannelMismatch }: NodeDetailProps) {
   const [node, setNode] = useState<Node | null>(null);
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const hasShownNotification = useRef(false);
+  const [selectedHistoricalIndex, setSelectedHistoricalIndex] = useState<Record<string, number>>({});
 
   useEffect(() => {
     // Reset notification flag when nodeId changes
@@ -149,6 +230,20 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
     ? [node.last_lat! / COORDINATE_SCALE_FACTOR, node.last_long! / COORDINATE_SCALE_FACTOR] as [number, number]
     : null;
 
+  // Extract and group historical positions
+  const historicalPositions = hasLocation ? groupPositionsByLocation(packets) : [];
+  
+  // Filter out historical positions that are at the same location as the current position
+  const filteredHistoricalPositions = coordinates 
+    ? historicalPositions.filter(pos => {
+        const currentLat = Math.round(coordinates[0] * 1000000) / 1000000;
+        const currentLng = Math.round(coordinates[1] * 1000000) / 1000000;
+        const posLat = Math.round(pos.lat * 1000000) / 1000000;
+        const posLng = Math.round(pos.lng * 1000000) / 1000000;
+        return currentLat !== posLat || currentLng !== posLng;
+      })
+    : historicalPositions;
+
   const getNodeName = (nodeId: number): string => {
     if (!nodeLookup) return formatNodeId(nodeId);
     return nodeLookup.getNodeName(nodeId);
@@ -171,6 +266,99 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
         onNodeClick(nodeData.id);
       }
     }
+  };
+
+  // Helper to cycle through packets at the same location
+  const cycleHistoricalPacket = (locationKey: string, direction: 'next' | 'prev', totalPackets: number) => {
+    const currentIndex = selectedHistoricalIndex[locationKey] || 0;
+    let newIndex: number;
+    
+    if (direction === 'next') {
+      newIndex = (currentIndex + 1) % totalPackets;
+    } else {
+      newIndex = (currentIndex - 1 + totalPackets) % totalPackets;
+    }
+    
+    setSelectedHistoricalIndex(prev => ({
+      ...prev,
+      [locationKey]: newIndex
+    }));
+  };
+
+  // Helper to render popup content for historical position
+  const renderHistoricalPopup = (position: HistoricalPosition) => {
+    const locationKey = `${position.lat},${position.lng}`;
+    const currentIndex = selectedHistoricalIndex[locationKey] || 0;
+    const currentPacket = position.packets[currentIndex];
+    
+    return (
+      <div style={{ minWidth: '200px' }}>
+        <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
+          Historical Position
+        </div>
+        <div style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+          <div><strong>Time:</strong> {formatLocalDateTime(currentPacket.timestamp)}</div>
+          <div>
+            <button 
+              onClick={() => onPacketClick(currentPacket.id)}
+              style={{ 
+                color: '#0366d6', 
+                background: 'none', 
+                border: 'none', 
+                cursor: 'pointer', 
+                textDecoration: 'underline',
+                padding: 0,
+                fontSize: '0.85rem'
+              }}
+            >
+              View Packet #{currentPacket.id}
+            </button>
+          </div>
+        </div>
+        {position.packets.length > 1 && (
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginTop: '0.5rem',
+            paddingTop: '0.5rem',
+            borderTop: '1px solid #ddd'
+          }}>
+            <button
+              onClick={() => cycleHistoricalPacket(locationKey, 'prev', position.packets.length)}
+              style={{
+                padding: '0.25rem 0.5rem',
+                background: '#0366d6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '0.75rem'
+              }}
+            >
+              ← Prev
+            </button>
+            <span style={{ fontSize: '0.75rem' }}>
+              {currentIndex + 1} / {position.packets.length}
+            </span>
+            <button
+              onClick={() => cycleHistoricalPacket(locationKey, 'next', position.packets.length)}
+              style={{
+                padding: '0.25rem 0.5rem',
+                background: '#0366d6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '0.75rem'
+              }}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -235,8 +423,20 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <Marker position={coordinates}>
-                  <Popup>{node.long_name}</Popup>
+                  <Popup>
+                    <div style={{ fontWeight: 'bold' }}>Current Location</div>
+                    <div>{node.long_name}</div>
+                  </Popup>
                 </Marker>
+                {filteredHistoricalPositions.map((position, idx) => (
+                  <Marker 
+                    key={`${position.lat},${position.lng}-${idx}`}
+                    position={[position.lat, position.lng]}
+                    icon={HistoricalIcon}
+                  >
+                    <Popup>{renderHistoricalPopup(position)}</Popup>
+                  </Marker>
+                ))}
               </MapContainer>
             </div>
           </div>
