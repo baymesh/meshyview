@@ -211,13 +211,17 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
     const ws = new WebSocket('wss://meshql.bayme.sh/ws');
     wsRef.current = ws;
 
+    // Capture the current node ID and node_id to avoid stale closures
+    const currentNodeId = node.id;
+    const currentNodeNumericId = node.node_id;
+
     ws.onopen = () => {
       console.log('WebSocket connected for node detail updates');
       // Subscribe to packets for this specific node
       const subscribeMessage = {
         action: 'subscribe',
         message_types: ['position', 'nodeinfo', 'all'], // Subscribe to all packet types for this node
-        node_id: node.id
+        node_id: currentNodeId
       };
       ws.send(JSON.stringify(subscribeMessage));
     };
@@ -232,7 +236,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
           console.log('Subscribed to node packet updates:', data.filters);
         } else if (data.type === 'position') {
           // Update node position if it's for this node
-          if (data.from_node_id === node.node_id && data.payload) {
+          if (data.from_node_id === currentNodeNumericId && data.payload) {
             if (typeof data.payload === 'object') {
               if ('latitude_i' in data.payload && 'longitude_i' in data.payload) {
                 setNode(prev => prev ? {
@@ -246,7 +250,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
           }
           
           // Add new position packet to the packets list
-          if (data.from_node_id === node.node_id || data.to_node_id === node.node_id) {
+          if (data.from_node_id === currentNodeNumericId || data.to_node_id === currentNodeNumericId) {
             const newPacket: Packet = {
               id: data.id,
               from_node_id: data.from_node_id,
@@ -262,7 +266,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
           }
         } else if (data.type === 'nodeinfo') {
           // Update node info if it's for this node
-          if (data.from_node_id === node.node_id && data.payload) {
+          if (data.from_node_id === currentNodeNumericId && data.payload) {
             if (typeof data.payload === 'object') {
               setNode(prev => prev ? {
                 ...prev,
@@ -276,7 +280,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
           }
         } else {
           // Handle any other packet type for this node
-          if (data.from_node_id === node.node_id || data.to_node_id === node.node_id) {
+          if (data.from_node_id === currentNodeNumericId || data.to_node_id === currentNodeNumericId) {
             const newPacket: Packet = {
               id: data.id,
               from_node_id: data.from_node_id,
@@ -310,7 +314,10 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
         ws.close();
       }
     };
-  }, [node]);
+  // Only reconnect when node.id or node.node_id changes, not when node object changes
+  // This prevents infinite reconnection loops when node state is updated via WebSocket
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node?.id, node?.node_id]);
 
   if (loading) {
     return <div className="loading">Loading node details...</div>;

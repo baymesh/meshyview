@@ -241,20 +241,9 @@ function App() {
               
               return updatedNodes;
             }
-            // Node doesn't exist yet, trigger a refresh
+            // Node doesn't exist yet, just return current list
             return prevNodes;
           });
-          
-          // Also update the node lookup
-          if (nodeLookup && data.from_node_id) {
-            const nodeData = nodeLookup.getNode(data.from_node_id);
-            if (nodeData) {
-              // Trigger a refresh of node lookup
-              api.getNodes({ limit: 1000 }).then(result => {
-                setNodeLookup(new NodeLookup(result.nodes));
-              }).catch(err => console.error('Error refreshing node lookup:', err));
-            }
-          }
         }
       } catch (err) {
         console.debug('WebSocket message parse error:', err);
@@ -275,7 +264,7 @@ function App() {
         ws.close();
       }
     };
-  }, [globalChannel, nodeLookup]);
+  }, [globalChannel]);
 
   const handleApplyFilters = (filters: FilterParams) => {
     fetchData(filters)
