@@ -135,6 +135,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   const [error, setError] = useState<string | null>(null);
   const hasShownNotification = useRef(false);
   const [selectedHistoricalIndex, setSelectedHistoricalIndex] = useState<Record<string, number>>({});
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     // Reset notification flag when nodeId changes
@@ -202,6 +203,114 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
 
     fetchNodeDetails();
   }, [nodeId, onChannelMismatch]);
+
+  // WebSocket subscription for real-time updates
+  useEffect(() => {
+    if (!node) return;
+
+    const ws = new WebSocket('wss://meshql.bayme.sh/ws');
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('WebSocket connected for node detail updates');
+      // Subscribe to packets for this specific node
+      const subscribeMessage = {
+        action: 'subscribe',
+        message_types: ['position', 'nodeinfo', 'all'], // Subscribe to all packet types for this node
+        node_id: node.id
+      };
+      ws.send(JSON.stringify(subscribeMessage));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'connected') {
+          console.log('Connected to MeshQL WebSocket for node details');
+        } else if (data.type === 'subscribed') {
+          console.log('Subscribed to node packet updates:', data.filters);
+        } else if (data.type === 'position') {
+          // Update node position if it's for this node
+          if (data.from_node_id === node.node_id && data.payload) {
+            if (typeof data.payload === 'object') {
+              if ('latitude_i' in data.payload && 'longitude_i' in data.payload) {
+                setNode(prev => prev ? {
+                  ...prev,
+                  last_lat: data.payload.latitude_i,
+                  last_long: data.payload.longitude_i,
+                  last_update: data.import_time || prev.last_update
+                } : prev);
+              }
+            }
+          }
+          
+          // Add new position packet to the packets list
+          if (data.from_node_id === node.node_id || data.to_node_id === node.node_id) {
+            const newPacket: Packet = {
+              id: data.id,
+              from_node_id: data.from_node_id,
+              to_node_id: data.to_node_id,
+              channel: data.channel,
+              portnum: data.portnum,
+              timestamp: data.timestamp,
+              import_time: data.import_time,
+              payload: data.payload,
+              payload_hex: data.payload_hex
+            };
+            setPackets(prev => [newPacket, ...prev].slice(0, 50)); // Keep last 50
+          }
+        } else if (data.type === 'nodeinfo') {
+          // Update node info if it's for this node
+          if (data.from_node_id === node.node_id && data.payload) {
+            if (typeof data.payload === 'object') {
+              setNode(prev => prev ? {
+                ...prev,
+                long_name: ('long_name' in data.payload && data.payload.long_name) || prev.long_name,
+                short_name: ('short_name' in data.payload && data.payload.short_name) || prev.short_name,
+                hw_model: ('hw_model' in data.payload && data.payload.hw_model) || prev.hw_model,
+                role: ('role' in data.payload && data.payload.role) || prev.role,
+                last_update: data.import_time || prev.last_update
+              } : prev);
+            }
+          }
+        } else {
+          // Handle any other packet type for this node
+          if (data.from_node_id === node.node_id || data.to_node_id === node.node_id) {
+            const newPacket: Packet = {
+              id: data.id,
+              from_node_id: data.from_node_id,
+              to_node_id: data.to_node_id,
+              channel: data.channel,
+              portnum: data.portnum,
+              timestamp: data.timestamp,
+              import_time: data.import_time,
+              payload: data.payload,
+              payload_hex: data.payload_hex
+            };
+            setPackets(prev => [newPacket, ...prev].slice(0, 50)); // Keep last 50
+          }
+        }
+      } catch (err) {
+        console.debug('WebSocket message parse error:', err);
+      }
+    };
+
+    ws.onerror = (err) => {
+      console.error('WebSocket error:', err);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+
+    // Cleanup on unmount or when node changes
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [node]);
 
   if (loading) {
     return <div className="loading">Loading node details...</div>;

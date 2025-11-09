@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 import { MeshMap } from './components/MeshMap'
 import { StatsDashboard } from './components/StatsDashboard'
@@ -86,6 +86,7 @@ function App() {
   })
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState(getViewFromUrl());
+  const wsRef = useRef<WebSocket | null>(null);
   
   // Handle channel selection
   const handleChannelChange = (channel: string) => {
@@ -174,6 +175,107 @@ function App() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // WebSocket connection for real-time node updates
+  useEffect(() => {
+    const ws = new WebSocket('wss://meshql.bayme.sh/ws');
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('WebSocket connected for node updates');
+      // Subscribe to node info updates
+      const subscribeMessage: { action: string; channel?: string; message_types: string[] } = {
+        action: 'subscribe',
+        message_types: ['nodeinfo', 'position']
+      };
+      if (globalChannel) {
+        subscribeMessage.channel = globalChannel;
+      }
+      ws.send(JSON.stringify(subscribeMessage));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        // Handle different message types
+        if (data.type === 'connected') {
+          console.log('Connected to MeshQL WebSocket');
+        } else if (data.type === 'subscribed') {
+          console.log('Subscribed to node updates:', data.filters);
+        } else if (data.type === 'nodeinfo' || data.type === 'position') {
+          // Update node in the list if it exists, otherwise refresh
+          setNodes(prevNodes => {
+            const nodeIndex = prevNodes.findIndex(n => n.node_id === data.from_node_id);
+            if (nodeIndex !== -1) {
+              // Node exists, update it with new data
+              const updatedNodes = [...prevNodes];
+              const existingNode = updatedNodes[nodeIndex];
+              
+              // Update relevant fields based on packet type
+              if (data.type === 'position' && data.payload) {
+                // Update position if available
+                if (typeof data.payload === 'object') {
+                  if ('latitude_i' in data.payload && 'longitude_i' in data.payload) {
+                    updatedNodes[nodeIndex] = {
+                      ...existingNode,
+                      last_lat: data.payload.latitude_i,
+                      last_long: data.payload.longitude_i,
+                      last_update: data.import_time || existingNode.last_update
+                    };
+                  }
+                }
+              } else if (data.type === 'nodeinfo' && data.payload) {
+                // Update node info if available
+                if (typeof data.payload === 'object') {
+                  updatedNodes[nodeIndex] = {
+                    ...existingNode,
+                    long_name: ('long_name' in data.payload && data.payload.long_name) || existingNode.long_name,
+                    short_name: ('short_name' in data.payload && data.payload.short_name) || existingNode.short_name,
+                    hw_model: ('hw_model' in data.payload && data.payload.hw_model) || existingNode.hw_model,
+                    role: ('role' in data.payload && data.payload.role) || existingNode.role,
+                    last_update: data.import_time || existingNode.last_update
+                  };
+                }
+              }
+              
+              return updatedNodes;
+            }
+            // Node doesn't exist yet, trigger a refresh
+            return prevNodes;
+          });
+          
+          // Also update the node lookup
+          if (nodeLookup && data.from_node_id) {
+            const nodeData = nodeLookup.getNode(data.from_node_id);
+            if (nodeData) {
+              // Trigger a refresh of node lookup
+              api.getNodes({ limit: 1000 }).then(result => {
+                setNodeLookup(new NodeLookup(result.nodes));
+              }).catch(err => console.error('Error refreshing node lookup:', err));
+            }
+          }
+        }
+      } catch (err) {
+        console.debug('WebSocket message parse error:', err);
+      }
+    };
+
+    ws.onerror = (err) => {
+      console.error('WebSocket error:', err);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+
+    // Cleanup on unmount or when channel changes
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [globalChannel, nodeLookup]);
 
   const handleApplyFilters = (filters: FilterParams) => {
     fetchData(filters)
