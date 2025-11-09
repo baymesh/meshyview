@@ -38,11 +38,7 @@ function MapViewController({ nodes }: { nodes: Node[] }) {
   const map = useMap();
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [geolocationAttempted, setGeolocationAttempted] = useState(false);
-
-  // Convert coordinates from integers to decimal degrees
-  const convertCoordinates = (lat: number, lon: number): [number, number] => {
-    return [lat / COORDINATE_SCALE_FACTOR, lon / COORDINATE_SCALE_FACTOR];
-  };
+  const [initialViewSet, setInitialViewSet] = useState(false);
 
   // Get user's geolocation on mobile
   useEffect(() => {
@@ -76,9 +72,14 @@ function MapViewController({ nodes }: { nodes: Node[] }) {
     }
   }, [geolocationAttempted]);
 
-  // Adjust map view based on nodes and user location
+  // Adjust map view based on nodes and user location - only on initial load
   useEffect(() => {
-    if (!geolocationAttempted) return;
+    if (!geolocationAttempted || initialViewSet) return;
+
+    // Convert coordinates from integers to decimal degrees
+    const convertCoordinates = (lat: number, lon: number): [number, number] => {
+      return [lat / COORDINATE_SCALE_FACTOR, lon / COORDINATE_SCALE_FACTOR];
+    };
 
     const nodesWithLocation = nodes.filter(
       (node) => node.last_lat !== null && node.last_long !== null
@@ -94,14 +95,17 @@ function MapViewController({ nodes }: { nodes: Node[] }) {
       
       // Fit bounds with padding
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+      setInitialViewSet(true);
     } else if (userLocation) {
       // If no nodes but we have user location, center on user
       map.setView(userLocation, 11);
-    } else {
-      // Fall back to default center
+      setInitialViewSet(true);
+    } else if (nodes.length === 0) {
+      // Fall back to default center only if no nodes at all
       map.setView(DEFAULT_CENTER, 9);
+      setInitialViewSet(true);
     }
-  }, [map, nodes, userLocation, geolocationAttempted]);
+  }, [map, nodes, userLocation, geolocationAttempted, initialViewSet]);
 
   return null;
 }
