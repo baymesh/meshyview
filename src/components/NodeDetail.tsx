@@ -530,6 +530,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
             <h3>Location</h3>
             <div className="node-map">
               <MapContainer
+                key={node.id}
                 center={coordinates}
                 zoom={13}
                 style={{ height: '300px', width: '100%' }}
