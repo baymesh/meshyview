@@ -27,7 +27,11 @@ function App() {
   // Dark mode state
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('darkMode');
-    return saved === 'true';
+    if (saved !== null) {
+      return saved === 'true';
+    }
+    // Default to system preference
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
   // Apply dark mode class to body
@@ -102,8 +106,6 @@ function App() {
     localStorage.setItem('globalChannel', channel)
     // Update URL with new channel
     updateUrl(activeTab, channel);
-    // Re-fetch data with new channel
-    fetchData({ channel: channel || undefined })
   }
 
   // Handle days active selection
@@ -336,6 +338,19 @@ function App() {
       <div className="app">
         <header className="app-header">
           <div className="header-content">
+            <ChannelSelector 
+              selectedChannel={globalChannel}
+              onChannelChange={handleChannelChange}
+              stats={allTimeStats}
+            />
+            <div className="header-main">
+              <h1>Meshyview</h1>
+              <p className="subtitle">Meshtastic Network Dashboard</p>
+            </div>
+            <TimeRangeSelector 
+              selectedDaysActive={globalDaysActive}
+              onDaysActiveChange={handleDaysActiveChange}
+            />
             <button 
               className="dark-mode-toggle"
               onClick={toggleDarkMode}
@@ -343,19 +358,6 @@ function App() {
             >
               {darkMode ? '☀️' : '🌙'}
             </button>
-            <div className="header-main">
-              <h1>Meshyview</h1>
-              <p className="subtitle">Meshtastic Network Dashboard</p>
-            </div>
-            <ChannelSelector 
-              selectedChannel={globalChannel}
-              onChannelChange={handleChannelChange}
-              stats={allTimeStats}
-            />
-            <TimeRangeSelector 
-              selectedDaysActive={globalDaysActive}
-              onDaysActiveChange={handleDaysActiveChange}
-            />
           </div>
         </header>
         <div className="app-content">
@@ -379,6 +381,19 @@ function App() {
       <div className="app">
         <header className="app-header">
           <div className="header-content">
+            <ChannelSelector 
+              selectedChannel={globalChannel}
+              onChannelChange={handleChannelChange}
+              stats={allTimeStats}
+            />
+            <div className="header-main">
+              <h1>Meshyview</h1>
+              <p className="subtitle">Meshtastic Network Dashboard</p>
+            </div>
+            <TimeRangeSelector 
+              selectedDaysActive={globalDaysActive}
+              onDaysActiveChange={handleDaysActiveChange}
+            />
             <button 
               className="dark-mode-toggle"
               onClick={toggleDarkMode}
@@ -386,19 +401,6 @@ function App() {
             >
               {darkMode ? '☀️' : '🌙'}
             </button>
-            <div className="header-main">
-              <h1>Meshyview</h1>
-              <p className="subtitle">Meshtastic Network Dashboard</p>
-            </div>
-            <ChannelSelector 
-              selectedChannel={globalChannel}
-              onChannelChange={handleChannelChange}
-              stats={allTimeStats}
-            />
-            <TimeRangeSelector 
-              selectedDaysActive={globalDaysActive}
-              onDaysActiveChange={handleDaysActiveChange}
-            />
           </div>
         </header>
         <div className="app-content">
@@ -422,6 +424,19 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-content">
+          <ChannelSelector 
+            selectedChannel={globalChannel}
+            onChannelChange={handleChannelChange}
+            stats={allTimeStats}
+          />
+          <div className="header-main">
+            <h1>Meshyview</h1>
+            <p className="subtitle">Meshtastic Network Dashboard</p>
+          </div>
+          <TimeRangeSelector 
+            selectedDaysActive={globalDaysActive}
+            onDaysActiveChange={handleDaysActiveChange}
+          />
           <button 
             className="dark-mode-toggle"
             onClick={toggleDarkMode}
@@ -429,19 +444,6 @@ function App() {
           >
             {darkMode ? '☀️' : '🌙'}
           </button>
-          <div className="header-main">
-            <h1>Meshyview</h1>
-            <p className="subtitle">Meshtastic Network Dashboard</p>
-          </div>
-          <ChannelSelector 
-            selectedChannel={globalChannel}
-            onChannelChange={handleChannelChange}
-            stats={allTimeStats}
-          />
-          <TimeRangeSelector 
-            selectedDaysActive={globalDaysActive}
-            onDaysActiveChange={handleDaysActiveChange}
-          />
         </div>
       </header>
 
@@ -516,7 +518,7 @@ function App() {
         )}
 
         {activeTab === 'stats' && (
-          <StatsDashboard stats={stats} loading={loading} globalChannel={globalChannel} />
+          <StatsDashboard stats={stats} loading={loading} globalChannel={globalChannel} globalDaysActive={globalDaysActive} />
         )}
 
         {activeTab === 'nodes' && (
@@ -554,7 +556,7 @@ function App() {
         <p>
           Powered by <a href="https://meshql.bayme.sh/docs" target="_blank" rel="noopener noreferrer">MeshQL API</a>
           {' | '}
-          <a href="https://github.com/baymesh" target="_blank" rel="noopener noreferrer">Github</a>
+          <a href="https://github.com/baymesh/meshyview" target="_blank" rel="noopener noreferrer">Github</a>
         </p>
       </footer>
     </div>

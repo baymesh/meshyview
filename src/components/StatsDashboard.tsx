@@ -7,9 +7,10 @@ interface StatsDashboardProps {
   stats: Stats | null;
   loading: boolean;
   globalChannel?: string;
+  globalDaysActive?: number;
 }
 
-export function StatsDashboard({ stats: initialStats, loading: initialLoading, globalChannel }: StatsDashboardProps) {
+export function StatsDashboard({ stats: initialStats, loading: initialLoading, globalChannel, globalDaysActive }: StatsDashboardProps) {
   const [stats, setStats] = useState<Stats | null>(initialStats);
   const [loading, setLoading] = useState(false); // Don't show loading on initial render
 
@@ -23,7 +24,7 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
 
   useEffect(() => {
     const fetchFilteredStats = async () => {
-      if (!globalChannel) {
+      if (!globalChannel && !globalDaysActive) {
         setStats(initialStats);
         setLoading(false);
         return;
@@ -31,7 +32,11 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
 
       try {
         setLoading(true);
-        const filteredStats = await api.getStats({ channel: globalChannel });
+        const params: { channel?: string; days_active?: number } = {};
+        if (globalChannel) params.channel = globalChannel;
+        if (globalDaysActive) params.days_active = globalDaysActive;
+        
+        const filteredStats = await api.getStats(params);
         setStats(filteredStats);
       } catch (err) {
         console.error('Error fetching filtered stats:', err);
@@ -42,7 +47,7 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
 
     fetchFilteredStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalChannel]);
+  }, [globalChannel, globalDaysActive]);
 
   // Show initial loading state from parent
   if (initialLoading && !stats) {

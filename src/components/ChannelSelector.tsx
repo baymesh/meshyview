@@ -11,12 +11,10 @@ export function ChannelSelector({ selectedChannel, onChannelChange, stats }: Cha
 
   return (
     <div className="channel-selector">
-      <label htmlFor="global-channel-selector">Channel:</label>
       <select
-        id="global-channel-selector"
         value={selectedChannel}
         onChange={(e) => onChannelChange(e.target.value)}
-        className="channel-selector-dropdown"
+        className="compact-select"
       >
         <option value="">All Channels</option>
         {channels.map(channel => (

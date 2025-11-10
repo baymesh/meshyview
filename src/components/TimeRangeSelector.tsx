@@ -3,20 +3,27 @@ interface TimeRangeSelectorProps {
   onDaysActiveChange: (daysActive: number) => void;
 }
 
+const timeRanges = [
+  { value: 1, label: '24h' },
+  { value: 7, label: '7d' },
+  { value: 14, label: '14d' },
+];
+
 export function TimeRangeSelector({ selectedDaysActive, onDaysActiveChange }: TimeRangeSelectorProps) {
   return (
     <div className="time-range-selector">
-      <label htmlFor="global-time-range-selector">Time Range:</label>
-      <select
-        id="global-time-range-selector"
-        value={selectedDaysActive.toString()}
-        onChange={(e) => onDaysActiveChange(parseFloat(e.target.value))}
-        className="time-range-selector-dropdown"
-      >
-        <option value="1">Last 24 Hours</option>
-        <option value="7">Last 7 Days</option>
-        <option value="14">Last 14 Days</option>
-      </select>
+      <div className="filter-button-group">
+        {timeRanges.map(({ value, label }) => (
+          <button
+            key={value}
+            className={`filter-btn ${selectedDaysActive === value ? 'active' : ''}`}
+            onClick={() => onDaysActiveChange(value)}
+            title={`Last ${value === 1 ? '24 hours' : `${value} days`}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
