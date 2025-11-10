@@ -37,6 +37,7 @@ export const api = {
 
   async getStats(params?: {
     channel?: string;
+    days_active?: number;
   }): Promise<Stats> {
     const url = buildApiUrl('/api/stats', params);
     const response = await fetch(url);

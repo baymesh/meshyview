@@ -58,20 +58,17 @@ export function ChatView({ nodeLookup, onNodeClick, onPacketClick, globalChannel
 
   // WebSocket subscription for real-time updates
   useEffect(() => {
-    const ws = new WebSocket('wss://meshql.bayme.sh/ws');
+    const params = new URLSearchParams();
+    params.append('portnum', '1'); // Text messages
+    if (selectedChannel) {
+      params.append('channel', selectedChannel);
+    }
+    
+    const ws = new WebSocket(`wss://meshql.bayme.sh/ws?${params.toString()}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('WebSocket connected');
-      // Subscribe to chat messages for the selected channel
-      const subscribeMessage: { action: string; channel?: string; message_types: string[] } = {
-        action: 'subscribe',
-        message_types: ['chat']
-      };
-      if (selectedChannel) {
-        subscribeMessage.channel = selectedChannel;
-      }
-      ws.send(JSON.stringify(subscribeMessage));
+      console.log('WebSocket connected for chat');
     };
 
     ws.onmessage = (event) => {
@@ -80,10 +77,10 @@ export function ChatView({ nodeLookup, onNodeClick, onPacketClick, globalChannel
         
         // Handle different message types
         if (data.type === 'connected') {
-          console.log('Connected to MeshQL WebSocket');
+          console.log('Connected to MeshQL WebSocket:', data.filters);
         } else if (data.type === 'subscribed') {
           console.log('Subscribed to chat updates:', data.filters);
-        } else if (data.type === 'chat') {
+        } else if (data.type === 'packet') {
           // Add new chat message to the list
           const newMessage: ChatMessage = {
             id: data.id,
@@ -97,7 +94,13 @@ export function ChatView({ nodeLookup, onNodeClick, onPacketClick, globalChannel
           
           // Only add if it's for the current channel (or all channels if none selected)
           if (!selectedChannel || newMessage.channel === selectedChannel) {
-            setMessages(prev => [...prev, newMessage]);
+            setMessages(prev => {
+              // Deduplicate: check if message with this ID already exists
+              if (prev.some(msg => msg.id === newMessage.id)) {
+                return prev;
+              }
+              return [...prev, newMessage];
+            });
           }
         }
       } catch (err) {

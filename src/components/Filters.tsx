@@ -7,6 +7,7 @@ interface FilterParams {
   hw_model?: string;
   hasLocation?: boolean;
   limit?: number;
+  days_active?: number;
 }
 
 interface FiltersProps {
@@ -14,13 +15,14 @@ interface FiltersProps {
   stats: Stats | null;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  activeTab?: 'map' | 'nodes';
 }
 
-export function Filters({ onApplyFilters, stats, isCollapsed, onToggleCollapse }: FiltersProps) {
+export function Filters({ onApplyFilters, stats, isCollapsed, onToggleCollapse, activeTab }: FiltersProps) {
   const [role, setRole] = useState('');
   const [hwModel, setHwModel] = useState('');
   const [hasLocation, setHasLocation] = useState<string>('all');
-  const [limit, setLimit] = useState('1000');
+  const [limit, setLimit] = useState('1500');
 
   const handleApply = () => {
     const filters: FilterParams = {};
@@ -36,7 +38,7 @@ export function Filters({ onApplyFilters, stats, isCollapsed, onToggleCollapse }
     setRole('');
     setHwModel('');
     setHasLocation('all');
-    setLimit('1000');
+    setLimit('1500');
     onApplyFilters({});
   };
 
@@ -88,20 +90,22 @@ export function Filters({ onApplyFilters, stats, isCollapsed, onToggleCollapse }
               </select>
             </div>
 
-            <div className="filter-group">
-              <label htmlFor="hasLocation">Has Location:</label>
-              <select
-                id="hasLocation"
-                value={hasLocation}
-                onChange={(e) => setHasLocation(e.target.value)}
-              >
-                <option value="all">All</option>
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-              </select>
-            </div>
+            {activeTab !== 'map' && (
+              <div className="filter-group">
+                <label htmlFor="hasLocation">Has Location:</label>
+                <select
+                  id="hasLocation"
+                  value={hasLocation}
+                  onChange={(e) => setHasLocation(e.target.value)}
+                >
+                  <option value="all">All</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+            )}
 
-            <div className="filter-group">
+            <div className="filter-group hidden">
               <label htmlFor="limit">Limit:</label>
               <input
                 id="limit"
