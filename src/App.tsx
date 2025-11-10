@@ -7,6 +7,7 @@ import { NodesList } from './components/NodesList'
 import { ChatView } from './components/ChatView'
 import { NodeDetail } from './components/NodeDetail'
 import { PacketDetail } from './components/PacketDetail'
+import { TracerouteDetail } from './components/TracerouteDetail'
 import { ChannelSelector } from './components/ChannelSelector'
 import { TimeRangeSelector } from './components/TimeRangeSelector'
 import { Toast } from './components/Toast'
@@ -51,14 +52,14 @@ function App() {
   };
 
   // Parse URL to determine current view
-  const getViewFromUrl = (): { type: 'main' | 'node' | 'packet'; id?: string; tab?: 'map' | 'stats' | 'nodes' | 'chat'; channel?: string } => {
+  const getViewFromUrl = (): { type: 'main' | 'node' | 'packet' | 'traceroute'; id?: string; tab?: 'map' | 'stats' | 'nodes' | 'chat'; channel?: string } => {
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     
-    // Check for node or packet detail views
-    const detailMatch = path.match(/^\/(node|packet)\/(.+)$/);
+    // Check for node, packet, or traceroute detail views
+    const detailMatch = path.match(/^\/(node|packet|traceroute)\/(.+)$/);
     if (detailMatch) {
-      return { type: detailMatch[1] as 'node' | 'packet', id: detailMatch[2] };
+      return { type: detailMatch[1] as 'node' | 'packet' | 'traceroute', id: detailMatch[2] };
     }
     
     // Check for main view with tab
@@ -306,6 +307,11 @@ function App() {
     // We'll check for packet channel mismatch in the PacketDetail component
   }
 
+  const handleTracerouteClick = (packetId: number) => {
+    window.history.pushState({}, '', `/traceroute/${packetId}`);
+    setCurrentView({ type: 'traceroute', id: packetId.toString() });
+  }
+
   const handleBackToMain = () => {
     window.history.pushState({}, '', '/');
     setCurrentView({ type: 'main' });
@@ -367,6 +373,7 @@ function App() {
             onBack={handleBackToMain}
             onNodeClick={handleNodeClick}
             onChannelMismatch={showChannelMismatch}
+            onTracerouteClick={handleTracerouteClick}
           />
         </div>
         {toastMessage && (
@@ -411,6 +418,49 @@ function App() {
             onPacketClick={handlePacketClick}
             onNodeClick={handleNodeClick}
             onChannelMismatch={showChannelMismatch}
+          />
+        </div>
+        {toastMessage && (
+          <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
+        )}
+      </div>
+    )
+  }
+
+  if (currentView.type === 'traceroute' && currentView.id) {
+    const tracerouteId = parseInt(currentView.id, 10);
+    return (
+      <div className="app">
+        <header className="app-header">
+          <div className="header-content">
+            <ChannelSelector 
+              selectedChannel={globalChannel}
+              onChannelChange={handleChannelChange}
+              stats={allTimeStats}
+            />
+            <div className="header-main">
+              <h1>Meshyview</h1>
+              <p className="subtitle">Meshtastic Network Dashboard</p>
+            </div>
+            <TimeRangeSelector 
+              selectedDaysActive={globalDaysActive}
+              onDaysActiveChange={handleDaysActiveChange}
+            />
+            <button 
+              className="dark-mode-toggle"
+              onClick={toggleDarkMode}
+              aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {darkMode ? '☀️' : '🌙'}
+            </button>
+          </div>
+        </header>
+        <div className="app-content">
+          <TracerouteDetail 
+            packetId={tracerouteId}
+            nodeLookup={nodeLookup}
+            onBack={handleBackToMain}
+            onNodeClick={handleNodeClick}
           />
         </div>
         {toastMessage && (

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
 import { formatNodeId, getPortNumName, formatLocalDateTime } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
+import { TracerouteVisualization } from './TracerouteVisualization';
+import { parseTraceroutePayload } from '../utils/tracerouteParser';
 
 interface PacketDetailProps {
   packetId: number;
@@ -9,6 +11,7 @@ interface PacketDetailProps {
   onBack: () => void;
   onNodeClick: (nodeId: string) => void;
   onChannelMismatch: (channel: string, type: 'node' | 'packet') => void;
+  onTracerouteClick?: (packetId: number) => void;
 }
 
 interface PacketData {
@@ -32,7 +35,7 @@ interface PacketData {
   }>;
 }
 
-export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChannelMismatch }: PacketDetailProps) {
+export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChannelMismatch, onTracerouteClick }: PacketDetailProps) {
   const [packet, setPacket] = useState<PacketData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +85,12 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
     return payload || '(empty)';
   };
 
+  // Check if this is a traceroute packet
+  const isTraceroute = packet?.portnum === 70;
+  const tracerouteData = isTraceroute && packet?.payload_hex 
+    ? parseTraceroutePayload(packet.payload_hex) 
+    : null;
+
   const getHopInfo = (gw: { node_id: number; node_name?: string; rx_rssi?: number; rx_snr?: number; hop_start?: number; hop_limit?: number }, packetFromNodeId: number): { hopText: string; hopCount: number; showSignal: boolean } => {
     // Check if gateway is the packet sender (self-gated)
     if (gw.node_id === packetFromNodeId) {
@@ -126,6 +135,32 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
       </div>
 
       <div className="packet-info-cards">
+        {isTraceroute && tracerouteData && tracerouteData.route.length > 0 && (
+          <div className="packet-traceroute-card">
+            <TracerouteVisualization
+              packetId={packet.id}
+              route={tracerouteData.route}
+              fromNodeId={packet.from_node_id}
+              toNodeId={packet.to_node_id}
+              nodeLookup={nodeLookup}
+              onNodeClick={onNodeClick}
+            />
+            {onTracerouteClick && (
+              <div className="traceroute-actions">
+                <button 
+                  className="btn-primary"
+                  onClick={() => onTracerouteClick(packet.id)}
+                >
+                  View Full Traceroute Details →
+                </button>
+                <p className="traceroute-hint">
+                  See all routes observed by different gateways and a comprehensive network graph
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="packet-info-card">
           <h3>Basic Information</h3>
           <div className="info-item">
