@@ -128,4 +128,28 @@ export const api = {
     }
     return response.json();
   },
+
+  async getTracerouteDetail(packetId: number): Promise<{
+    packet_id: number;
+    traceroutes: Array<{
+      id: number;
+      packet_id: number;
+      gateway_node_id: number;
+      done: boolean;
+      import_time: string;
+      route: {
+        type: string;
+        route: number[];
+        raw_hex?: string;
+      };
+      route_hex: string;
+    }>;
+  }> {
+    const url = buildApiUrl(`/api/traceroutes/${packetId}`, { decode_payload: true });
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch traceroute: ${response.statusText}`);
+    }
+    return response.json();
+  },
 };

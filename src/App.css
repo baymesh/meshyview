@@ -979,7 +979,8 @@ body {
 
 .packet-info-card,
 .packet-payload-card,
-.packet-gateways-card {
+.packet-gateways-card,
+.packet-traceroute-card {
   background: var(--bg-tertiary);
   padding: 1.5rem;
   border-radius: 6px;
@@ -988,7 +989,8 @@ body {
 
 .packet-info-card h3,
 .packet-payload-card h3,
-.packet-gateways-card h3 {
+.packet-gateways-card h3,
+.packet-traceroute-card h3 {
   margin: 0 0 1rem 0;
   font-size: 1.1rem;
   color: var(--text-primary);
@@ -1318,6 +1320,15 @@ body {
   }
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .toast-content {
   display: flex;
   align-items: center;
@@ -1395,6 +1406,24 @@ body {
   .toast-content {
     min-width: unset;
     width: 100%;
+  }
+
+  .traceroute-detail {
+    padding: 1rem;
+  }
+
+  .route-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .route-time {
+    margin-left: 0;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1484,6 +1513,289 @@ body {
 
 .dark-mode .leaflet-control-layers {
   background: var(--bg-secondary) !important;
+}
+
+/* Traceroute Visualization */
+.traceroute-visualization {
+  width: 100%;
+}
+
+.packet-traceroute-card {
+  grid-column: 1 / -1; /* Full width */
+}
+
+.traceroute-svg-container {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 2rem 0;
+  margin: 1rem 0;
+}
+
+.traceroute-node-circle {
+  transition: all 0.2s ease;
+}
+
+.traceroute-node:hover .traceroute-node-circle {
+  filter: brightness(1.2);
+  stroke-width: 4;
+}
+
+.traceroute-node {
+  transition: transform 0.2s ease;
+}
+
+.traceroute-node:hover {
+  transform: scale(1.05);
+}
+
+.traceroute-actions {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.traceroute-actions .btn-primary {
+  padding: 0.75rem 1.5rem;
+  background: #0366d6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.traceroute-actions .btn-primary:hover {
+  background: #0256c7;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(3, 102, 214, 0.3);
+}
+
+.traceroute-hint {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Traceroute Detail Page */
+.traceroute-detail {
+  padding: 2rem;
+}
+
+.traceroute-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.traceroute-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.traceroute-summary {
+  background: var(--bg-tertiary);
+  padding: 1.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.summary-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.summary-value {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.traceroute-graph-card {
+  background: var(--bg-tertiary);
+  padding: 1.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.graph-desc {
+  margin: 0.5rem 0 1rem 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.traceroute-graph-container {
+  width: 100%;
+  overflow: auto;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 2rem;
+  border: 1px solid var(--border-color);
+}
+
+.graph-node circle {
+  transition: all 0.2s ease;
+}
+
+.graph-node:hover circle {
+  filter: brightness(1.2);
+  stroke-width: 3;
+}
+
+.traceroute-routes-card {
+  background: var(--bg-tertiary);
+  padding: 1.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.routes-desc {
+  margin: 0.5rem 0 1rem 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.routes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.route-item {
+  background: var(--bg-secondary);
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.route-completed {
+  border-left: 4px solid #4CAF50;
+}
+
+.route-incomplete {
+  border-left: 4px solid #FF9800;
+  opacity: 0.8;
+}
+
+.route-incomplete-badge {
+  background: #FF9800;
+  color: white;
+}
+
+.route-unknown {
+  padding: 0.4rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: #666;
+  color: white;
+}
+
+.route-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.route-number {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.route-gateway {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.route-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.route-direct {
+  background: #4CAF50;
+  color: white;
+}
+
+.route-multi-hop {
+  background: #FF9800;
+  color: white;
+}
+
+.route-time {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.route-path {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.route-node {
+  padding: 0.4rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.route-source {
+  background: #4CAF50;
+  color: white;
+}
+
+.route-dest {
+  background: #2196F3;
+  color: white;
+}
+
+.route-hop {
+  background: #FF9800;
+  color: white;
+}
+
+.route-hop:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.route-arrow {
+  color: var(--text-secondary);
+  font-size: 1.2rem;
 }
 
 .dark-mode .leaflet-control-layers-separator {
