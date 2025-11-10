@@ -16,11 +16,9 @@ interface FiltersProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   activeTab?: 'map' | 'nodes';
-  globalDaysActive?: number;
-  onDaysActiveChange?: (daysActive: number) => void;
 }
 
-export function Filters({ onApplyFilters, stats, isCollapsed, onToggleCollapse, activeTab, globalDaysActive, onDaysActiveChange }: FiltersProps) {
+export function Filters({ onApplyFilters, stats, isCollapsed, onToggleCollapse, activeTab }: FiltersProps) {
   const [role, setRole] = useState('');
   const [hwModel, setHwModel] = useState('');
   const [hasLocation, setHasLocation] = useState<string>('all');

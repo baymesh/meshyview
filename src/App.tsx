@@ -489,8 +489,6 @@ function App() {
                 isCollapsed={filtersCollapsed}
                 onToggleCollapse={() => setFiltersCollapsed(!filtersCollapsed)}
                 activeTab="map"
-                globalDaysActive={globalDaysActive}
-                onDaysActiveChange={handleDaysActiveChange}
               />
             </div>
             <div className="map-container">
@@ -529,8 +527,6 @@ function App() {
               isCollapsed={filtersCollapsed}
               onToggleCollapse={() => setFiltersCollapsed(!filtersCollapsed)}
               activeTab="nodes"
-              globalDaysActive={globalDaysActive}
-              onDaysActiveChange={handleDaysActiveChange}
             />
             {loading ? (
               <div className="loading">Loading nodes...</div>

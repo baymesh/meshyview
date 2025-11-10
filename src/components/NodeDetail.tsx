@@ -210,8 +210,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   useEffect(() => {
     if (!node) return;
 
-    // Capture the current node ID and node_id to avoid stale closures
-    const currentNodeId = node.id;
+    // Capture the current node_id to avoid stale closures
     const currentNodeNumericId = node.node_id;
 
     // Subscribe to packets from this node
