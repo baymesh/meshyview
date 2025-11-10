@@ -136,7 +136,6 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
 
   // Separate completed and incomplete routes
   const completedRoutes = uniqueRoutes.filter(r => r.completed);
-  const incompleteRoutes = uniqueRoutes.filter(r => !r.completed);
 
   // Build comprehensive graph from all routes
   const { nodes: graphNodes, edges: graphEdges } = useRef<{ nodes: GraphNode[], edges: GraphEdge[] }>({
