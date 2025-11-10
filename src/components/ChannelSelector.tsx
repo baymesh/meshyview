@@ -9,12 +9,6 @@ interface ChannelSelectorProps {
 export function ChannelSelector({ selectedChannel, onChannelChange, stats }: ChannelSelectorProps) {
   const channels = stats?.nodes_by_channel ? Object.keys(stats.nodes_by_channel).sort() : [];
 
-  const getDisplayText = () => {
-    if (!selectedChannel) return 'All Channels';
-    const count = stats?.nodes_by_channel[selectedChannel] || 0;
-    return `${selectedChannel} (${count})`;
-  };
-
   return (
     <div className="channel-selector">
       <select
