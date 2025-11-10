@@ -304,12 +304,12 @@ function App() {
   }
 
   // Function to show channel mismatch (called from NodeDetail and PacketDetail)
-  const showChannelMismatch = (channel: string, type: 'node' | 'packet') => {
+  const showChannelMismatch = useCallback((channel: string, type: 'node' | 'packet') => {
     if (globalChannel && channel !== globalChannel) {
       const itemType = type === 'node' ? 'node' : 'packet';
       setToastMessage(`This ${itemType} is on channel "${channel}", but you have "${globalChannel}" selected.`);
     }
-  }
+  }, [globalChannel]);
 
   if (currentView.type === 'packet' && currentView.id) {
     const packetId = parseInt(currentView.id, 10);
