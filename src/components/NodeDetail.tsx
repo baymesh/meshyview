@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, LayersControl } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../api';
 import type { Node } from '../types';
 import { formatNodeId, parseNodeId, getPortNumName, formatLocalDateTime } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
+
+const { BaseLayer } = LayersControl;
 
 // Fix for default marker icons
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -208,22 +210,19 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   useEffect(() => {
     if (!node) return;
 
-    const ws = new WebSocket('wss://meshql.bayme.sh/ws');
-    wsRef.current = ws;
-
     // Capture the current node ID and node_id to avoid stale closures
     const currentNodeId = node.id;
     const currentNodeNumericId = node.node_id;
 
+    // Subscribe to packets from this node
+    const params = new URLSearchParams();
+    params.append('from_node_id', currentNodeNumericId.toString());
+    
+    const ws = new WebSocket(`wss://meshql.bayme.sh/ws?${params.toString()}`);
+    wsRef.current = ws;
+
     ws.onopen = () => {
       console.log('WebSocket connected for node detail updates');
-      // Subscribe to packets for this specific node
-      const subscribeMessage = {
-        action: 'subscribe',
-        message_types: ['position', 'nodeinfo', 'all'], // Subscribe to all packet types for this node
-        node_id: currentNodeId
-      };
-      ws.send(JSON.stringify(subscribeMessage));
     };
 
     ws.onmessage = (event) => {
@@ -231,68 +230,47 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
         const data = JSON.parse(event.data);
         
         if (data.type === 'connected') {
-          console.log('Connected to MeshQL WebSocket for node details');
+          console.log('Connected to MeshQL WebSocket for node details:', data.filters);
         } else if (data.type === 'subscribed') {
           console.log('Subscribed to node packet updates:', data.filters);
-        } else if (data.type === 'position') {
-          // Update node position if it's for this node
-          if (data.from_node_id === currentNodeNumericId && data.payload) {
-            if (typeof data.payload === 'object') {
-              if ('latitude_i' in data.payload && 'longitude_i' in data.payload) {
-                setNode(prev => prev ? {
-                  ...prev,
-                  last_lat: data.payload.latitude_i,
-                  last_long: data.payload.longitude_i,
-                  last_update: data.import_time || prev.last_update
-                } : prev);
+        } else if (data.type === 'node') {
+          // Update node info if it's for this node
+          if (data.node_id === currentNodeNumericId) {
+            setNode(prev => prev ? {
+              ...prev,
+              ...data,
+              last_update: data.last_update || prev.last_update
+            } : prev);
+          }
+        } else if (data.type === 'packet') {
+          // Add new packet to the packets list
+          if (data.from_node_id === currentNodeNumericId || data.to_node_id === currentNodeNumericId) {
+            const newPacket: Packet = {
+              id: data.id,
+              from_node_id: data.from_node_id,
+              to_node_id: data.to_node_id,
+              channel: data.channel,
+              portnum: data.portnum,
+              timestamp: data.timestamp,
+              import_time: data.import_time,
+              payload: data.payload,
+              payload_hex: data.payload_hex
+            };
+            setPackets(prev => [newPacket, ...prev].slice(0, 50)); // Keep last 50
+            
+            // Update node position if this is a position packet
+            if (data.portnum === 3 && data.from_node_id === currentNodeNumericId && data.payload) {
+              if (typeof data.payload === 'object') {
+                if ('latitude_i' in data.payload && 'longitude_i' in data.payload) {
+                  setNode(prev => prev ? {
+                    ...prev,
+                    last_lat: data.payload.latitude_i,
+                    last_long: data.payload.longitude_i,
+                    last_update: data.import_time || prev.last_update
+                  } : prev);
+                }
               }
             }
-          }
-          
-          // Add new position packet to the packets list
-          if (data.from_node_id === currentNodeNumericId || data.to_node_id === currentNodeNumericId) {
-            const newPacket: Packet = {
-              id: data.id,
-              from_node_id: data.from_node_id,
-              to_node_id: data.to_node_id,
-              channel: data.channel,
-              portnum: data.portnum,
-              timestamp: data.timestamp,
-              import_time: data.import_time,
-              payload: data.payload,
-              payload_hex: data.payload_hex
-            };
-            setPackets(prev => [newPacket, ...prev].slice(0, 50)); // Keep last 50
-          }
-        } else if (data.type === 'nodeinfo') {
-          // Update node info if it's for this node
-          if (data.from_node_id === currentNodeNumericId && data.payload) {
-            if (typeof data.payload === 'object') {
-              setNode(prev => prev ? {
-                ...prev,
-                long_name: ('long_name' in data.payload && data.payload.long_name) || prev.long_name,
-                short_name: ('short_name' in data.payload && data.payload.short_name) || prev.short_name,
-                hw_model: ('hw_model' in data.payload && data.payload.hw_model) || prev.hw_model,
-                role: ('role' in data.payload && data.payload.role) || prev.role,
-                last_update: data.import_time || prev.last_update
-              } : prev);
-            }
-          }
-        } else {
-          // Handle any other packet type for this node
-          if (data.from_node_id === currentNodeNumericId || data.to_node_id === currentNodeNumericId) {
-            const newPacket: Packet = {
-              id: data.id,
-              from_node_id: data.from_node_id,
-              to_node_id: data.to_node_id,
-              channel: data.channel,
-              portnum: data.portnum,
-              timestamp: data.timestamp,
-              import_time: data.import_time,
-              payload: data.payload,
-              payload_hex: data.payload_hex
-            };
-            setPackets(prev => [newPacket, ...prev].slice(0, 50)); // Keep last 50
           }
         }
       } catch (err) {
@@ -535,10 +513,29 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                 zoom={13}
                 style={{ height: '300px', width: '100%' }}
               >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
+                <LayersControl position="topright">
+                  <BaseLayer checked name="Street Map">
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                  </BaseLayer>
+                  
+                  <BaseLayer name="Satellite">
+                    <TileLayer
+                      attribution='Imagery &copy; <a href="https://www.esri.com/">Esri</a>'
+                      url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    />
+                  </BaseLayer>
+                  
+                  <BaseLayer name="Terrain">
+                    <TileLayer
+                      attribution='Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+                      url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+                    />
+                  </BaseLayer>
+                </LayersControl>
+                
                 <Marker position={coordinates}>
                   <Popup>
                     <div style={{ fontWeight: 'bold' }}>Current Location</div>

@@ -8,6 +8,7 @@ import { ChatView } from './components/ChatView'
 import { NodeDetail } from './components/NodeDetail'
 import { PacketDetail } from './components/PacketDetail'
 import { ChannelSelector } from './components/ChannelSelector'
+import { TimeRangeSelector } from './components/TimeRangeSelector'
 import { Toast } from './components/Toast'
 import { api } from './api'
 import type { Node, Stats } from './types'
@@ -19,6 +20,7 @@ interface FilterParams {
   hw_model?: string;
   hasLocation?: boolean;
   limit?: number;
+  days_active?: number;
 }
 
 function App() {
@@ -69,6 +71,7 @@ function App() {
   const [nodes, setNodes] = useState<Node[]>([])
   const [nodeLookup, setNodeLookup] = useState<NodeLookup | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
+  const [allTimeStats, setAllTimeStats] = useState<Stats | null>(null) // For channel selector
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'map' | 'stats' | 'nodes' | 'chat'>(() => {
@@ -82,10 +85,15 @@ function App() {
     if (initialView.channel) {
       return initialView.channel;
     }
-    return localStorage.getItem('globalChannel') || '';
+    return localStorage.getItem('globalChannel') || 'MediumFast';
+  })
+  const [globalDaysActive, setGlobalDaysActive] = useState<number>(() => {
+    const saved = localStorage.getItem('globalDaysActive');
+    return saved ? parseFloat(saved) : 1; // Default to 1 day
   })
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState(getViewFromUrl());
+  const [recentlyUpdatedNodes, setRecentlyUpdatedNodes] = useState<Map<number, number>>(new Map()); // node_id -> timestamp
   const wsRef = useRef<WebSocket | null>(null);
   
   // Handle channel selection
@@ -96,6 +104,14 @@ function App() {
     updateUrl(activeTab, channel);
     // Re-fetch data with new channel
     fetchData({ channel: channel || undefined })
+  }
+
+  // Handle days active selection
+  const handleDaysActiveChange = (daysActive: number) => {
+    setGlobalDaysActive(daysActive)
+    localStorage.setItem('globalDaysActive', daysActive.toString())
+    // Re-fetch data with new days_active
+    fetchData({ days_active: daysActive })
   }
 
   // Update URL based on tab and channel
@@ -144,22 +160,40 @@ function App() {
     loadAllNodes()
   }, [])
 
+  // Load all-time stats once for channel selector (no time filter)
+  useEffect(() => {
+    const loadAllTimeStats = async () => {
+      try {
+        const data = await api.getStats() // No filters - get all channels
+        setAllTimeStats(data)
+      } catch (err) {
+        console.error('Error loading all-time stats:', err)
+      }
+    }
+    loadAllTimeStats()
+  }, [])
+
   const fetchData = useCallback(async (filters: FilterParams = {}) => {
     try {
       setLoading(true)
       setError(null)
       
-      // Apply global channel filter to nodes
+      // Apply global filters
       const channelFilter = globalChannel || filters.channel
+      const daysActiveFilter = filters.days_active !== undefined ? filters.days_active : globalDaysActive
       const apiFilters = { ...filters }
       if (channelFilter) {
         apiFilters.channel = channelFilter
       }
+      apiFilters.days_active = daysActiveFilter
       
       const [nodesData, statsData] = await Promise.all([
         api.getNodes({ ...apiFilters, limit: apiFilters.limit || 1000 }),
-        // Always fetch stats for ALL channels so the channel selector works
-        api.getStats(),
+        // Pass channel and days_active to stats as well
+        api.getStats({ 
+          channel: channelFilter || undefined,
+          days_active: daysActiveFilter
+        }),
       ])
       
       setNodes(nodesData.nodes)
@@ -170,7 +204,7 @@ function App() {
     } finally {
       setLoading(false)
     }
-  }, [globalChannel])
+  }, [globalChannel, globalDaysActive])
 
   useEffect(() => {
     fetchData()
@@ -178,20 +212,16 @@ function App() {
 
   // WebSocket connection for real-time node updates
   useEffect(() => {
-    const ws = new WebSocket('wss://meshql.bayme.sh/ws');
+    const params = new URLSearchParams();
+    if (globalChannel) {
+      params.append('channel', globalChannel);
+    }
+    
+    const ws = new WebSocket(`wss://meshql.bayme.sh/ws?${params.toString()}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('WebSocket connected for node updates');
-      // Subscribe to node info updates
-      const subscribeMessage: { action: string; channel?: string; message_types: string[] } = {
-        action: 'subscribe',
-        message_types: ['nodeinfo', 'position']
-      };
-      if (globalChannel) {
-        subscribeMessage.channel = globalChannel;
-      }
-      ws.send(JSON.stringify(subscribeMessage));
     };
 
     ws.onmessage = (event) => {
@@ -200,49 +230,33 @@ function App() {
         
         // Handle different message types
         if (data.type === 'connected') {
-          console.log('Connected to MeshQL WebSocket');
+          console.log('Connected to MeshQL WebSocket:', data.filters);
         } else if (data.type === 'subscribed') {
           console.log('Subscribed to node updates:', data.filters);
-        } else if (data.type === 'nodeinfo' || data.type === 'position') {
-          // Update node in the list if it exists, otherwise refresh
+        } else if (data.type === 'node') {
+          // Mark this node as recently updated
+          setRecentlyUpdatedNodes(prev => {
+            const newMap = new Map(prev);
+            newMap.set(data.node_id, Date.now());
+            return newMap;
+          });
+          
+          // Update node in the list if it exists, otherwise add it
           setNodes(prevNodes => {
-            const nodeIndex = prevNodes.findIndex(n => n.node_id === data.from_node_id);
+            const nodeIndex = prevNodes.findIndex(n => n.node_id === data.node_id);
             if (nodeIndex !== -1) {
               // Node exists, update it with new data
               const updatedNodes = [...prevNodes];
-              const existingNode = updatedNodes[nodeIndex];
-              
-              // Update relevant fields based on packet type
-              if (data.type === 'position' && data.payload) {
-                // Update position if available
-                if (typeof data.payload === 'object') {
-                  if ('latitude_i' in data.payload && 'longitude_i' in data.payload) {
-                    updatedNodes[nodeIndex] = {
-                      ...existingNode,
-                      last_lat: data.payload.latitude_i,
-                      last_long: data.payload.longitude_i,
-                      last_update: data.import_time || existingNode.last_update
-                    };
-                  }
-                }
-              } else if (data.type === 'nodeinfo' && data.payload) {
-                // Update node info if available
-                if (typeof data.payload === 'object') {
-                  updatedNodes[nodeIndex] = {
-                    ...existingNode,
-                    long_name: ('long_name' in data.payload && data.payload.long_name) || existingNode.long_name,
-                    short_name: ('short_name' in data.payload && data.payload.short_name) || existingNode.short_name,
-                    hw_model: ('hw_model' in data.payload && data.payload.hw_model) || existingNode.hw_model,
-                    role: ('role' in data.payload && data.payload.role) || existingNode.role,
-                    last_update: data.import_time || existingNode.last_update
-                  };
-                }
-              }
-              
+              updatedNodes[nodeIndex] = {
+                ...updatedNodes[nodeIndex],
+                ...data,
+                last_update: data.last_update || updatedNodes[nodeIndex].last_update
+              };
               return updatedNodes;
+            } else {
+              // New node, add it to the list
+              return [...prevNodes, data];
             }
-            // Node doesn't exist yet, just return current list
-            return prevNodes;
           });
         }
       } catch (err) {
@@ -267,7 +281,12 @@ function App() {
   }, [globalChannel]);
 
   const handleApplyFilters = (filters: FilterParams) => {
-    fetchData(filters)
+    // Force hasLocation=true for map view
+    if (activeTab === 'map') {
+      fetchData({ ...filters, hasLocation: true });
+    } else {
+      fetchData(filters);
+    }
   }
 
   const handleNodeClick = (nodeId: string) => {
@@ -331,7 +350,11 @@ function App() {
             <ChannelSelector 
               selectedChannel={globalChannel}
               onChannelChange={handleChannelChange}
-              stats={stats}
+              stats={allTimeStats}
+            />
+            <TimeRangeSelector 
+              selectedDaysActive={globalDaysActive}
+              onDaysActiveChange={handleDaysActiveChange}
             />
           </div>
         </header>
@@ -370,7 +393,11 @@ function App() {
             <ChannelSelector 
               selectedChannel={globalChannel}
               onChannelChange={handleChannelChange}
-              stats={stats}
+              stats={allTimeStats}
+            />
+            <TimeRangeSelector 
+              selectedDaysActive={globalDaysActive}
+              onDaysActiveChange={handleDaysActiveChange}
             />
           </div>
         </header>
@@ -409,7 +436,11 @@ function App() {
           <ChannelSelector 
             selectedChannel={globalChannel}
             onChannelChange={handleChannelChange}
-            stats={stats}
+            stats={allTimeStats}
+          />
+          <TimeRangeSelector 
+            selectedDaysActive={globalDaysActive}
+            onDaysActiveChange={handleDaysActiveChange}
           />
         </div>
       </header>
@@ -457,13 +488,20 @@ function App() {
                 stats={stats}
                 isCollapsed={filtersCollapsed}
                 onToggleCollapse={() => setFiltersCollapsed(!filtersCollapsed)}
+                activeTab="map"
+                globalDaysActive={globalDaysActive}
+                onDaysActiveChange={handleDaysActiveChange}
               />
             </div>
             <div className="map-container">
               {loading ? (
                 <div className="loading">Loading nodes...</div>
               ) : (
-                <MeshMap nodes={nodes} onNodeClick={handleNodeClick} />
+                <MeshMap 
+                  nodes={nodes} 
+                  onNodeClick={handleNodeClick} 
+                  recentlyUpdatedNodes={recentlyUpdatedNodes}
+                />
               )}
             </div>
             <div className="map-legend">
@@ -490,6 +528,9 @@ function App() {
               stats={stats}
               isCollapsed={filtersCollapsed}
               onToggleCollapse={() => setFiltersCollapsed(!filtersCollapsed)}
+              activeTab="nodes"
+              globalDaysActive={globalDaysActive}
+              onDaysActiveChange={handleDaysActiveChange}
             />
             {loading ? (
               <div className="loading">Loading nodes...</div>

@@ -1,8 +1,10 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl } from 'react-leaflet';
 import { useEffect, useState } from 'react';
 import L from 'leaflet';
 import type { Node } from '../types';
 import 'leaflet/dist/leaflet.css';
+
+const { BaseLayer } = LayersControl;
 
 // Fix for default marker icons in webpack
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -25,6 +27,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 interface MeshMapProps {
   nodes: Node[];
   onNodeClick?: (nodeId: string) => void;
+  recentlyUpdatedNodes?: Map<number, number>; // node_id -> timestamp
 }
 
 // Meshtastic stores coordinates as integers (lat/lon * 10^7)
@@ -110,7 +113,20 @@ function MapViewController({ nodes }: { nodes: Node[] }) {
   return null;
 }
 
-export function MeshMap({ nodes, onNodeClick }: MeshMapProps) {
+export function MeshMap({ nodes, onNodeClick, recentlyUpdatedNodes }: MeshMapProps) {
+  const [, forceUpdate] = useState({});
+  
+  // Force re-render every second to update glow effect
+  useEffect(() => {
+    if (!recentlyUpdatedNodes || recentlyUpdatedNodes.size === 0) return;
+    
+    const interval = setInterval(() => {
+      forceUpdate({});
+    }, 1000); // Update every second for smooth fade
+    
+    return () => clearInterval(interval);
+  }, [recentlyUpdatedNodes]);
+  
   // Filter nodes with valid coordinates
   const nodesWithLocation = nodes.filter(
     (node) => node.last_lat !== null && node.last_long !== null
@@ -135,12 +151,33 @@ export function MeshMap({ nodes, onNodeClick }: MeshMapProps) {
     return colors[role] || '#888888';
   };
 
-  // Create custom icons based on role
-  const createCustomIcon = (role: string) => {
+  // Calculate glow opacity based on time since update
+  const getGlowOpacity = (nodeId: number): number => {
+    if (!recentlyUpdatedNodes) return 0;
+    const updateTime = recentlyUpdatedNodes.get(nodeId);
+    if (!updateTime) return 0;
+    
+    const elapsed = Date.now() - updateTime;
+    const maxDuration = 60000; // 60 seconds
+    
+    if (elapsed >= maxDuration) return 0;
+    
+    // Fade from 1 to 0 over 60 seconds
+    return 1 - (elapsed / maxDuration);
+  };
+
+  // Create custom icons based on role and update status
+  const createCustomIcon = (role: string, nodeId: number) => {
     const color = getRoleColor(role);
+    const glowOpacity = getGlowOpacity(nodeId);
+    
+    const glowStyle = glowOpacity > 0 
+      ? `box-shadow: 0 0 20px rgba(255, 255, 0, ${glowOpacity}), 0 0 40px rgba(255, 255, 0, ${glowOpacity * 0.5}), 0 2px 4px rgba(0,0,0,0.3);`
+      : 'box-shadow: 0 2px 4px rgba(0,0,0,0.3);';
+    
     return L.divIcon({
       className: 'custom-marker',
-      html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+      html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; ${glowStyle}"></div>`,
       iconSize: [20, 20],
       iconAnchor: [10, 10],
       popupAnchor: [0, -10],
@@ -154,10 +191,29 @@ export function MeshMap({ nodes, onNodeClick }: MeshMapProps) {
       style={{ height: '100%', width: '100%' }}
     >
       <MapViewController nodes={nodes} />
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      
+      <LayersControl position="topright">
+        <BaseLayer checked name="Street Map">
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+        </BaseLayer>
+        
+        <BaseLayer name="Satellite">
+          <TileLayer
+            attribution='Imagery &copy; <a href="https://www.esri.com/">Esri</a>'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          />
+        </BaseLayer>
+        
+        <BaseLayer name="Terrain">
+          <TileLayer
+            attribution='Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+            url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+          />
+        </BaseLayer>
+      </LayersControl>
 
       {/* Draw markers */}
       {nodesWithLocation.map((node) => {
@@ -166,7 +222,7 @@ export function MeshMap({ nodes, onNodeClick }: MeshMapProps) {
           <Marker 
             key={node.id} 
             position={[lat, lon]}
-            icon={createCustomIcon(node.role)}
+            icon={createCustomIcon(node.role, node.node_id)}
           >
             <Popup>
               <div style={{ minWidth: '200px' }}>
