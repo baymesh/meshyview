@@ -1,4 +1,4 @@
-import type { NodesResponse, Stats, EdgesResponse, ChatResponse, TopGatewaysResponse } from './types';
+import type { NodesResponse, Stats, EdgesResponse, ChatResponse, TopGatewaysResponse, NodeNeighborsResponse } from './types';
 
 const API_BASE_URL = 'https://meshql.bayme.sh';
 
@@ -123,6 +123,7 @@ export const api = {
       node_name?: string;
       rssi?: number;
       snr?: number;
+      relay_node?: number;
     }>;
   }> {
     const url = buildApiUrl(`/api/packets/${packetId}`, params);
@@ -166,6 +167,15 @@ export const api = {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch top gateways: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  async getNodeNeighbors(nodeId: number): Promise<NodeNeighborsResponse> {
+    const url = `${API_BASE_URL}/api/nodes/${nodeId}/neighbors`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch node neighbors: ${response.statusText}`);
     }
     return response.json();
   },

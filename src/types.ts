@@ -84,3 +84,14 @@ export interface TopGateway {
 export interface TopGatewaysResponse {
   gateways: TopGateway[];
 }
+
+export interface NodeNeighbor {
+  node_id: number;
+  packet_count: number;
+}
+
+export interface NodeNeighborsResponse {
+  node_id: number;
+  heard_by: NodeNeighbor[];
+  heard_from: NodeNeighbor[];
+}

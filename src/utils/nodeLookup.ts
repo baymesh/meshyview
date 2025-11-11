@@ -32,4 +32,19 @@ export class NodeLookup {
     const id = typeof nodeId === 'number' ? formatNodeId(nodeId) : nodeId;
     return this.nodeMap.get(id);
   }
+
+  getAllNodes(): Node[] {
+    // Return unique nodes (nodeMap has duplicates - by hex ID and numeric ID)
+    const seen = new Set<number>();
+    const nodes: Node[] = [];
+    
+    for (const node of this.nodeMap.values()) {
+      if (!seen.has(node.node_id)) {
+        seen.add(node.node_id);
+        nodes.push(node);
+      }
+    }
+    
+    return nodes;
+  }
 }

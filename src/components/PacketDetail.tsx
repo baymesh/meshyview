@@ -45,6 +45,7 @@ interface PacketData {
     rx_snr?: number;
     hop_start?: number;
     hop_limit?: number;
+    relay_node?: number;
   }>;
 }
 
@@ -54,6 +55,10 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   const [error, setError] = useState<string | null>(null);
   const [hasTracerouteData, setHasTracerouteData] = useState<boolean>(false);
   const [checkingTraceroute, setCheckingTraceroute] = useState<boolean>(false);
+  const [relayMatches, setRelayMatches] = useState<Map<number, number[]>>(new Map());
+  const [ambiguousRelayCount, setAmbiguousRelayCount] = useState<number>(0);
+  const [refiningRelays, setRefiningRelays] = useState<boolean>(false);
+  const [refiningGateways, setRefiningGateways] = useState<Set<number>>(new Set());
   const hasShownNotification = useRef(false);
 
   useEffect(() => {
@@ -89,6 +94,112 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
     fetchPacketDetail();
   }, [packetId, onChannelMismatch]);
 
+  // Phase 1: Quick local lookup for relay nodes using only gateway data
+  useEffect(() => {
+    if (!packet?.gateways || packet.gateways.length === 0 || !nodeLookup) {
+      setRelayMatches(new Map());
+      setAmbiguousRelayCount(0);
+      return;
+    }
+
+    const matches = new Map<number, number[]>();
+    let ambiguousCount = 0;
+    
+    for (const gw of packet.gateways!) {
+      if (gw.relay_node !== undefined && gw.relay_node !== null) {
+        // Check all nodes in the nodeLookup for matching last byte on the same channel
+        const potentialNodes: number[] = [];
+        
+        // Get all nodes on the same channel
+        const allNodes = nodeLookup.getAllNodes();
+        for (const node of allNodes) {
+          // Only consider nodes on the same channel
+          if (node.channel === packet.channel && (node.node_id & 255) === gw.relay_node) {
+            potentialNodes.push(node.node_id);
+          }
+        }
+        
+        if (potentialNodes.length > 0) {
+          matches.set(gw.node_id, potentialNodes);
+          if (potentialNodes.length > 1) {
+            ambiguousCount++;
+          }
+        }
+      }
+    }
+    
+    setRelayMatches(matches);
+    setAmbiguousRelayCount(ambiguousCount);
+  }, [packet, nodeLookup]);
+
+  // Phase 2: Refine a single gateway's relay match using API
+  const refineSingleRelay = async (gwNodeId: number, gwRelayNode: number) => {
+    if (!packet?.gateways) return;
+    
+    const gw = packet.gateways.find(g => g.node_id === gwNodeId);
+    if (!gw) return;
+    
+    // Mark as refining
+    setRefiningGateways(prev => new Set(prev).add(gwNodeId));
+    
+    try {
+      const neighbors = await api.getNodeNeighbors(gwNodeId);
+      const gwName = gw.node_name || getNodeName(gwNodeId);
+      
+      console.log(`[Relay Debug] Gateway: ${gwName} (${gwNodeId}, relay_node: ${gwRelayNode})`);
+      console.log(`  heard_from:`, neighbors.heard_from.map(n => `${n.node_id} (last byte: ${n.node_id & 255}, packets: ${n.packet_count})`));
+      console.log(`  heard_by:`, neighbors.heard_by.map(n => `${n.node_id} (last byte: ${n.node_id & 255}, packets: ${n.packet_count})`));
+      
+      // Prefer heard_from (nodes this gateway heard from), fallback to heard_by
+      let matchingNeighbors = neighbors.heard_from
+        .filter(n => (n.node_id & 255) === gwRelayNode);
+      
+      console.log(`  heard_from matches:`, matchingNeighbors.map(n => `${n.node_id} (packets: ${n.packet_count})`));
+      
+      if (matchingNeighbors.length === 0) {
+        // Fallback to heard_by if nothing in heard_from
+        matchingNeighbors = neighbors.heard_by
+          .filter(n => (n.node_id & 255) === gwRelayNode);
+        console.log(`  heard_by matches (fallback):`, matchingNeighbors.map(n => `${n.node_id} (packets: ${n.packet_count})`));
+      }
+      
+      if (matchingNeighbors.length > 0) {
+        // Sort by packet_count descending and take the top one (most likely relay)
+        matchingNeighbors.sort((a, b) => b.packet_count - a.packet_count);
+        const bestMatch = matchingNeighbors[0].node_id;
+        
+        console.log(`  ✓ Selected best match: ${bestMatch} with ${matchingNeighbors[0].packet_count} packets`);
+        
+        setRelayMatches(prev => {
+          const updated = new Map(prev);
+          updated.set(gwNodeId, [bestMatch]);
+          return updated;
+        });
+      } else {
+        console.log(`  ✗ No matches found!`);
+      }
+    } catch (err) {
+      console.error(`Error fetching neighbors for node ${gwNodeId}:`, err);
+    } finally {
+      // Remove from refining set
+      setRefiningGateways(prev => {
+        const updated = new Set(prev);
+        updated.delete(gwNodeId);
+        return updated;
+      });
+      
+      // Recalculate ambiguous count
+      setRelayMatches(prev => {
+        let stillAmbiguous = 0;
+        prev.forEach(matches => {
+          if (matches.length > 1) stillAmbiguous++;
+        });
+        setAmbiguousRelayCount(stillAmbiguous);
+        return prev;
+      });
+    }
+  };
+
   // Check if this packet has traceroute observations (only for portnum 70)
   // If the payload has request_id, use that as the traceroute ID, otherwise use packet ID
   useEffect(() => {
@@ -122,9 +233,22 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
 
   // Check if this is a traceroute packet
   const isTraceroute = packet?.portnum === 70;
-  const tracerouteData = isTraceroute && packet?.payload_hex 
-    ? parseTraceroutePayload(packet.payload_hex) 
-    : null;
+  
+  // Try to get route from decoded payload first, fallback to parsing hex
+  let tracerouteData: { route: number[] } | null = null;
+  if (isTraceroute) {
+    if (typeof packet?.payload === 'object' && packet.payload !== null && 'route' in packet.payload) {
+      // Use decoded route from payload
+      tracerouteData = { route: packet.payload.route as number[] };
+    } else if (packet?.payload_hex) {
+      // Fallback to parsing hex payload
+      tracerouteData = parseTraceroutePayload(packet.payload_hex);
+    }
+  }
+  
+  const tracerouteDone = isTraceroute && typeof packet?.payload === 'object' && packet.payload !== null && 'done' in packet.payload
+    ? (packet.payload.done as boolean)
+    : false;
 
   // Check if this is a neighbor info packet and extract neighbors
   const isNeighborInfo = packet?.portnum === 71;
@@ -258,6 +382,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
               route={tracerouteData.route}
               fromNodeId={packet.from_node_id}
               toNodeId={packet.to_node_id}
+              isDone={tracerouteDone}
               nodeLookup={nodeLookup}
               onNodeClick={onNodeClick}
             />
@@ -342,8 +467,12 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
 
         {packet.gateways && packet.gateways.length > 0 && (
           <div className="packet-gateways-card">
-            <h3>Gateways ({packet.gateways.length})</h3>
-            <p className="gateways-desc">Nodes that heard this packet:</p>
+            <div className="gateways-header">
+              <div>
+                <h3>Gateways ({packet.gateways.length})</h3>
+                <p className="gateways-desc">Nodes that heard this packet:</p>
+              </div>
+            </div>
             <table className="gateways-table">
               <thead>
                 <tr>
@@ -374,15 +503,105 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                         )}
                         <tr key={idx}>
                           <td>
-                            <button 
-                              className="node-link"
-                              onClick={() => onNodeClick(formatNodeId(gw.node_id))}
-                            >
-                              {gw.node_name || getNodeName(gw.node_id)}
-                            </button>
-                            <span className="node-hex">({formatNodeId(gw.node_id)})</span>
+                            <div className="gateway-cell">
+                              <div className="gateway-name">
+                                <button 
+                                  className="node-link"
+                                  onClick={() => onNodeClick(formatNodeId(gw.node_id))}
+                                >
+                                  {gw.node_name || getNodeName(gw.node_id)}
+                                </button>
+                                <span className="node-hex">({formatNodeId(gw.node_id)})</span>
+                              </div>
+                            </div>
                           </td>
-                          <td>{hopInfo.hopText}</td>
+                          <td>
+                            {hopInfo.hopText}
+                            {/* Only show relay info if it's NOT a direct connection */}
+                            {hopInfo.hopCount > 0 && gw.relay_node !== undefined && gw.relay_node !== null && relayMatches.has(gw.node_id) && (() => {
+                              let matches = relayMatches.get(gw.node_id)!;
+                              const hasMultipleMatches = matches.length > 1;
+                              const isRefining = refiningGateways.has(gw.node_id);
+                              
+                              // If multiple matches and gateway has location, sort by distance
+                              if (matches.length > 1 && nodeLookup) {
+                                const gwNode = nodeLookup.getNode(gw.node_id);
+                                if (gwNode?.last_lat && gwNode?.last_long && gwNode.last_lat !== 0 && gwNode.last_long !== 0) {
+                                  // Calculate distances for each match
+                                  const matchesWithDistance = matches.map(nodeId => {
+                                    const dist = getDistance(gw.node_id, nodeId);
+                                    return { nodeId, distance: dist };
+                                  });
+                                  
+                                  // Sort: nodes with distances first (ascending), then nodes without distances
+                                  matchesWithDistance.sort((a, b) => {
+                                    if (a.distance === null && b.distance === null) return 0;
+                                    if (a.distance === null) return 1;
+                                    if (b.distance === null) return -1;
+                                    return a.distance - b.distance;
+                                  });
+                                  
+                                  return (
+                                    <div className={`relay-info ${isRefining ? 'relay-refining' : ''}`}>
+                                      via {matchesWithDistance.map((match, idx) => (
+                                        <span key={match.nodeId}>
+                                          {idx > 0 && ' or '}
+                                          <button 
+                                            className="node-link relay-node-link"
+                                            onClick={() => onNodeClick(formatNodeId(match.nodeId))}
+                                            title={`Relay node (last byte: ${gw.relay_node})`}
+                                          >
+                                            {getNodeName(match.nodeId)}
+                                          </button>
+                                          <span className="relay-distance">
+                                            {match.distance !== null ? ` (${match.distance.toFixed(1)} mi)` : ' (? mi)'}
+                                          </span>
+                                        </span>
+                                      ))}
+                                      {hasMultipleMatches && !isRefining && (
+                                        <button
+                                          className="refine-single-btn"
+                                          onClick={() => refineSingleRelay(gw.node_id, gw.relay_node!)}
+                                          title="Refine using API to find best match"
+                                        >
+                                          ⚡
+                                        </button>
+                                      )}
+                                      {isRefining && <span className="refining-indicator"></span>}
+                                    </div>
+                                  );
+                                }
+                              }
+                              
+                              // Default rendering without distance sorting
+                              return (
+                                <div className={`relay-info ${isRefining ? 'relay-refining' : ''}`}>
+                                  via {matches.map((nodeId, idx) => (
+                                    <span key={nodeId}>
+                                      {idx > 0 && ' or '}
+                                      <button 
+                                        className="node-link relay-node-link"
+                                        onClick={() => onNodeClick(formatNodeId(nodeId))}
+                                        title={`Relay node (last byte: ${gw.relay_node})`}
+                                      >
+                                        {getNodeName(nodeId)}
+                                      </button>
+                                    </span>
+                                  ))}
+                                  {hasMultipleMatches && !isRefining && (
+                                    <button
+                                      className="refine-single-btn"
+                                      onClick={() => refineSingleRelay(gw.node_id, gw.relay_node!)}
+                                      title="Refine using API to find best match"
+                                    >
+                                      ⚡
+                                    </button>
+                                  )}
+                                  {isRefining && <span className="refining-indicator"></span>}
+                                </div>
+                              );
+                            })()}
+                          </td>
                           <td>
                             {hopInfo.showSignal && gw.rx_snr !== undefined && gw.rx_rssi !== undefined ? (
                               <div className="signal-quality-container">

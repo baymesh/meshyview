@@ -7,6 +7,7 @@ interface TracerouteVisualizationProps {
   route: number[]; // Array of node IDs in the route
   fromNodeId: number;
   toNodeId: number;
+  isDone: boolean; // Whether the traceroute reached its destination
   nodeLookup: NodeLookup | null;
   onNodeClick: (nodeId: string) => void;
 }
@@ -14,13 +15,14 @@ interface TracerouteVisualizationProps {
 export function TracerouteVisualization({ 
   route, 
   fromNodeId, 
-  toNodeId, 
+  toNodeId,
+  isDone,
   nodeLookup, 
   onNodeClick 
 }: TracerouteVisualizationProps) {
   const nodes = useMemo(() => {
-    // Create full path: from -> route nodes -> to
-    const fullPath = [fromNodeId, ...route, toNodeId];
+    // Create full path: from -> route nodes -> (optionally) to
+    const fullPath = isDone ? [fromNodeId, ...route, toNodeId] : [fromNodeId, ...route];
     // Remove duplicates while preserving order
     const uniquePath: number[] = [];
     const seen = new Set<number>();
@@ -31,7 +33,7 @@ export function TracerouteVisualization({
       }
     }
     return uniquePath;
-  }, [route, fromNodeId, toNodeId]);
+  }, [route, fromNodeId, toNodeId, isDone]);
 
   const getNodeName = (nodeId: number): string => {
     if (!nodeLookup) return formatNodeId(nodeId);
@@ -103,7 +105,8 @@ export function TracerouteVisualization({
             {nodes.map((nodeId, idx) => {
               const x = startX + idx * nodeSpacing;
               const isStart = idx === 0;
-              const isEnd = idx === nodes.length - 1;
+              const isEnd = idx === nodes.length - 1 && isDone;
+              const isLastHop = idx === nodes.length - 1 && !isDone;
               const nodeName = getNodeName(nodeId);
               const nodeIdHex = formatNodeId(nodeId);
 
@@ -119,7 +122,7 @@ export function TracerouteVisualization({
                     cx={x}
                     cy={centerY}
                     r={nodeRadius}
-                    fill={isStart ? '#4CAF50' : isEnd ? '#2196F3' : '#FF9800'}
+                    fill={isStart ? '#4CAF50' : isEnd ? '#2196F3' : isLastHop ? '#ef4444' : '#FF9800'}
                     stroke="#fff"
                     strokeWidth="3"
                     className="traceroute-node-circle"
@@ -135,7 +138,7 @@ export function TracerouteVisualization({
                     fill="#fff"
                     pointerEvents="none"
                   >
-                    {isStart ? 'FROM' : isEnd ? 'TO' : idx}
+                    {isStart ? 'FROM' : isEnd ? 'TO' : isLastHop ? 'END' : idx}
                   </text>
 
                   {/* Node name below */}

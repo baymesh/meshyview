@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, LayersControl } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../api';
-import type { Node } from '../types';
+import type { Node, NodeNeighborsResponse } from '../types';
 import { formatNodeId, parseNodeId, getPortNumName, formatLocalDateTime } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
 
@@ -140,6 +140,8 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [neighbors, setNeighbors] = useState<NodeNeighborsResponse | null>(null);
+  const [neighborsLoading, setNeighborsLoading] = useState(false);
   const hasShownNotification = useRef(false);
   const [selectedHistoricalIndex, setSelectedHistoricalIndex] = useState<Record<string, number>>({});
   const wsRef = useRef<WebSocket | null>(null);
@@ -259,6 +261,26 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
 
     fetchNodeDetails();
   }, [nodeId, onChannelMismatch]);
+
+  // Fetch neighbors
+  useEffect(() => {
+    if (!node) return;
+
+    const fetchNeighbors = async () => {
+      try {
+        setNeighborsLoading(true);
+        const neighborsData = await api.getNodeNeighbors(node.node_id);
+        setNeighbors(neighborsData);
+      } catch (err) {
+        console.error('Error fetching neighbors:', err);
+        setNeighbors(null);
+      } finally {
+        setNeighborsLoading(false);
+      }
+    };
+
+    fetchNeighbors();
+  }, [node]);
 
   // WebSocket subscription for real-time updates
   useEffect(() => {
@@ -544,6 +566,10 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
             <span className="info-value">{node.node_id}</span>
           </div>
           <div className="info-item">
+            <span className="info-label">Relay ID:</span>
+            <span className="info-value">{node.node_id & 255}</span>
+          </div>
+          <div className="info-item">
             <span className="info-label">Role:</span>
             <span className="info-value">{node.role}</span>
           </div>
@@ -618,6 +644,103 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
           </div>
         )}
 
+        {/* Neighbors section */}
+        <div className="node-neighbors-card">
+          <h3>Neighbors</h3>
+          {neighborsLoading ? (
+            <div className="neighbors-loading">Loading neighbors...</div>
+          ) : neighbors ? (
+            <div className="neighbors-grid">
+              {neighbors.heard_from.length > 0 && (
+                <div className="neighbors-section">
+                  <h4>Heard From ({neighbors.heard_from.filter(n => n.node_id !== node.node_id).length})</h4>
+                  <table className="neighbors-table">
+                    <thead>
+                      <tr>
+                        <th>Node</th>
+                        <th>Relay ID</th>
+                        <th>Packets</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {neighbors.heard_from
+                        .filter(n => n.node_id !== node.node_id)
+                        .sort((a, b) => b.packet_count - a.packet_count)
+                        .slice(0, 25)
+                        .map(neighbor => {
+                          const neighborNode = nodeLookup?.getNode(neighbor.node_id);
+                          return (
+                            <tr key={neighbor.node_id}>
+                              <td>
+                                <button 
+                                  className="node-link"
+                                  onClick={() => onNodeClick(formatNodeId(neighbor.node_id))}
+                                >
+                                  {neighborNode?.long_name || formatNodeId(neighbor.node_id)}
+                                </button>
+                              </td>
+                              <td>{neighbor.node_id & 255}</td>
+                              <td>{neighbor.packet_count}</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                  {neighbors.heard_from.filter(n => n.node_id !== node.node_id).length > 25 && (
+                    <div className="neighbors-more">...and {neighbors.heard_from.filter(n => n.node_id !== node.node_id).length - 25} more</div>
+                  )}
+                </div>
+              )}
+              {neighbors.heard_by.length > 0 && (
+                <div className="neighbors-section">
+                  <h4>Heard By ({neighbors.heard_by.filter(n => n.node_id !== node.node_id).length})</h4>
+                  <table className="neighbors-table">
+                    <thead>
+                      <tr>
+                        <th>Node</th>
+                        <th>Relay ID</th>
+                        <th>Packets</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {neighbors.heard_by
+                        .filter(n => n.node_id !== node.node_id)
+                        .sort((a, b) => b.packet_count - a.packet_count)
+                        .slice(0, 25)
+                        .map(neighbor => {
+                          const neighborNode = nodeLookup?.getNode(neighbor.node_id);
+                          return (
+                            <tr key={neighbor.node_id}>
+                              <td>
+                                <button 
+                                  className="node-link"
+                                  onClick={() => onNodeClick(formatNodeId(neighbor.node_id))}
+                                >
+                                  {neighborNode?.long_name || formatNodeId(neighbor.node_id)}
+                                </button>
+                              </td>
+                              <td>{neighbor.node_id & 255}</td>
+                              <td>{neighbor.packet_count}</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                  {neighbors.heard_by.filter(n => n.node_id !== node.node_id).length > 25 && (
+                    <div className="neighbors-more">...and {neighbors.heard_by.filter(n => n.node_id !== node.node_id).length - 25} more</div>
+                  )}
+                </div>
+              )}
+              {neighbors.heard_from.filter(n => n.node_id !== node.node_id).length === 0 && 
+               neighbors.heard_by.filter(n => n.node_id !== node.node_id).length === 0 && (
+                <div className="neighbors-empty">No neighbor data available</div>
+              )}
+            </div>
+          ) : (
+            <div className="neighbors-error">Failed to load neighbors</div>
+          )}
+        </div>
+
         <div className="node-packets-card">
           <div className="node-packets-header">
             <h3>Recent Packets ({filteredAndSortedPackets.length})</h3>
@@ -632,15 +755,15 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                 className={packetFilter === 'from' ? 'active' : ''}
                 onClick={() => setPacketFilter('from')}
               >
-                From
-              </button>
-              <button
-                className={packetFilter === 'to' ? 'active' : ''}
-                onClick={() => setPacketFilter('to')}
-              >
-                To
-              </button>
-            </div>
+              From
+            </button>
+            <button
+              className={packetFilter === 'to' ? 'active' : ''}
+              onClick={() => setPacketFilter('to')}
+            >
+              To
+            </button>
+          </div>
             <div className="port-filter-selector">
               <label>
                 Port:
