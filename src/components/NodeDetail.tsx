@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, LayersControl } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../api';
@@ -61,7 +61,12 @@ interface Packet {
   import_time?: string;
   payload: string | { type: string; text?: string; [key: string]: unknown };
   payload_hex?: string;
+  gateway_count?: number;
 }
+
+type PacketFilter = 'all' | 'from' | 'to';
+type SortField = 'timestamp' | 'gateways';
+type SortDirection = 'asc' | 'desc';
 
 interface HistoricalPosition {
   lat: number;
@@ -138,6 +143,54 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   const hasShownNotification = useRef(false);
   const [selectedHistoricalIndex, setSelectedHistoricalIndex] = useState<Record<string, number>>({});
   const wsRef = useRef<WebSocket | null>(null);
+  const [packetFilter, setPacketFilter] = useState<PacketFilter>('all');
+  const [selectedPort, setSelectedPort] = useState<string>('all');
+  const [sortField, setSortField] = useState<SortField>('timestamp');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // Filter and sort packets - must be before useEffect hooks
+  const filteredAndSortedPackets = useMemo(() => {
+    if (!node) return [];
+
+    // First filter by direction
+    let filtered = packets;
+    if (packetFilter === 'from') {
+      filtered = packets.filter(pkt => pkt.from_node_id === node.node_id);
+    } else if (packetFilter === 'to') {
+      filtered = packets.filter(pkt => pkt.to_node_id === node.node_id);
+    }
+
+    // Then filter by port
+    if (selectedPort !== 'all') {
+      filtered = filtered.filter(pkt => pkt.portnum?.toString() === selectedPort);
+    }
+
+    // Then sort
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      let aValue: number;
+      let bValue: number;
+
+      if (sortField === 'gateways') {
+        aValue = a.gateway_count ?? 0;
+        bValue = b.gateway_count ?? 0;
+      } else {
+        const aTime = a.timestamp || a.import_time || '';
+        const bTime = b.timestamp || b.import_time || '';
+        aValue = new Date(aTime).getTime();
+        bValue = new Date(bTime).getTime();
+      }
+
+      return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+    });
+
+    return sorted;
+  }, [packets, node, packetFilter, selectedPort, sortField, sortDirection]);
+
+  const uniquePorts = useMemo(() => {
+    const ports = new Set(packets.map(pkt => pkt.portnum?.toString()).filter((p): p is string => !!p));
+    return Array.from(ports).sort((a, b) => parseInt(a) - parseInt(b));
+  }, [packets]);
 
   useEffect(() => {
     // Reset notification flag when nodeId changes
@@ -192,7 +245,8 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
         const packetsData = await api.getPackets({
           node_id: foundNode.id,
           limit: 50,
-          decode_payload: true
+          decode_payload: true,
+          includeGatewayCount: true
         });
         setPackets(packetsData.packets || []);
       } catch (err) {
@@ -358,6 +412,15 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
       if (nodeData?.id) {
         onNodeClick(nodeData.id);
       }
+    }
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
     }
   };
 
@@ -556,21 +619,67 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
         )}
 
         <div className="node-packets-card">
-          <h3>Recent Packets ({packets.length})</h3>
+          <div className="node-packets-header">
+            <h3>Recent Packets ({filteredAndSortedPackets.length})</h3>
+            <div className="packet-filter-selector">
+              <button
+                className={packetFilter === 'all' ? 'active' : ''}
+                onClick={() => setPacketFilter('all')}
+              >
+                All
+              </button>
+              <button
+                className={packetFilter === 'from' ? 'active' : ''}
+                onClick={() => setPacketFilter('from')}
+              >
+                From
+              </button>
+              <button
+                className={packetFilter === 'to' ? 'active' : ''}
+                onClick={() => setPacketFilter('to')}
+              >
+                To
+              </button>
+            </div>
+            <div className="port-filter-selector">
+              <label>
+                Port:
+                <select value={selectedPort} onChange={(e) => setSelectedPort(e.target.value)}>
+                  <option value="all">All</option>
+                  {uniquePorts.map(port => (
+                    <option key={port} value={port}>
+                      {getPortNumName(port, false)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
           <div className="packets-table-container">
             <table className="packets-table">
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Timestamp</th>
+                  <th 
+                    className="sortable"
+                    onClick={() => handleSort('timestamp')}
+                  >
+                    Timestamp {sortField === 'timestamp' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th>From</th>
                   <th>To</th>
                   <th>Port</th>
                   <th>Channel</th>
+                  <th 
+                    className="sortable"
+                    onClick={() => handleSort('gateways')}
+                  >
+                    Gateways {sortField === 'gateways' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {packets.map((pkt) => {
+                {filteredAndSortedPackets.map((pkt) => {
                   const timestamp = pkt.timestamp || pkt.import_time || '';
                   const fromNodeId = pkt.from_node_id || 0;
                   const toNodeId = pkt.to_node_id || 0;
@@ -612,6 +721,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                       </td>
                       <td>{getPortNumName(pkt.portnum.toString())}</td>
                       <td>{pkt.channel}</td>
+                      <td>{pkt.gateway_count ?? '-'}</td>
                     </tr>
                   );
                 })}

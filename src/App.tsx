@@ -5,6 +5,7 @@ import { StatsDashboard } from './components/StatsDashboard'
 import { Filters } from './components/Filters'
 import { NodesList } from './components/NodesList'
 import { ChatView } from './components/ChatView'
+import { RecentPackets } from './components/RecentPackets'
 import { NodeDetail } from './components/NodeDetail'
 import { PacketDetail } from './components/PacketDetail'
 import { TracerouteDetail } from './components/TracerouteDetail'
@@ -52,7 +53,7 @@ function App() {
   };
 
   // Parse URL to determine current view
-  const getViewFromUrl = (): { type: 'main' | 'node' | 'packet' | 'traceroute'; id?: string; tab?: 'map' | 'stats' | 'nodes' | 'chat'; channel?: string } => {
+  const getViewFromUrl = (): { type: 'main' | 'node' | 'packet' | 'traceroute'; id?: string; tab?: 'map' | 'stats' | 'nodes' | 'chat' | 'packets'; channel?: string } => {
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     
@@ -63,9 +64,9 @@ function App() {
     }
     
     // Check for main view with tab
-    const tabMatch = path.match(/^\/(map|stats|nodes|chat)$/);
+    const tabMatch = path.match(/^\/(map|stats|nodes|chat|packets)$/);
     if (tabMatch) {
-      const tab = tabMatch[1] as 'map' | 'stats' | 'nodes' | 'chat';
+      const tab = tabMatch[1] as 'map' | 'stats' | 'nodes' | 'chat' | 'packets';
       const channel = params.get('channel') || undefined;
       return { type: 'main', tab, channel };
     }
@@ -79,7 +80,7 @@ function App() {
   const [allTimeStats, setAllTimeStats] = useState<Stats | null>(null) // For channel selector
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'map' | 'stats' | 'nodes' | 'chat'>(() => {
+  const [activeTab, setActiveTab] = useState<'map' | 'stats' | 'nodes' | 'chat' | 'packets'>(() => {
     const initialView = getViewFromUrl();
     return initialView.tab || 'map';
   })
@@ -118,14 +119,14 @@ function App() {
   }
 
   // Update URL based on tab and channel
-  const updateUrl = (tab: 'map' | 'stats' | 'nodes' | 'chat', channel?: string) => {
+  const updateUrl = (tab: 'map' | 'stats' | 'nodes' | 'chat' | 'packets', channel?: string) => {
     const channelParam = channel ? `?channel=${encodeURIComponent(channel)}` : '';
     const newPath = `/${tab}${channelParam}`;
     window.history.pushState({}, '', newPath);
   }
 
   // Handle tab change
-  const handleTabChange = (tab: 'map' | 'stats' | 'nodes' | 'chat') => {
+  const handleTabChange = (tab: 'map' | 'stats' | 'nodes' | 'chat' | 'packets') => {
     setActiveTab(tab);
     updateUrl(tab, globalChannel);
   }
@@ -517,6 +518,12 @@ function App() {
           Nodes List
         </button>
         <button
+          className={activeTab === 'packets' ? 'active' : ''}
+          onClick={() => handleTabChange('packets')}
+        >
+          Packets
+        </button>
+        <button
           className={activeTab === 'chat' ? 'active' : ''}
           onClick={() => handleTabChange('chat')}
         >
@@ -568,7 +575,13 @@ function App() {
         )}
 
         {activeTab === 'stats' && (
-          <StatsDashboard stats={stats} loading={loading} globalChannel={globalChannel} globalDaysActive={globalDaysActive} />
+          <StatsDashboard 
+            stats={stats} 
+            loading={loading} 
+            globalChannel={globalChannel} 
+            globalDaysActive={globalDaysActive}
+            onNodeClick={handleNodeClick}
+          />
         )}
 
         {activeTab === 'nodes' && (
@@ -588,6 +601,16 @@ function App() {
           </div>
         )}
 
+        {activeTab === 'packets' && (
+          <RecentPackets 
+            nodeLookup={nodeLookup}
+            selectedChannel={globalChannel}
+            daysActive={globalDaysActive}
+            onPacketClick={handlePacketClick}
+            onNodeClick={handleNodeClick}
+          />
+        )}
+
         {activeTab === 'chat' && (
           <ChatView 
             nodeLookup={nodeLookup} 
@@ -604,7 +627,7 @@ function App() {
 
       <footer className="app-footer">
         <p>
-          Powered by <a href="https://meshql.bayme.sh/docs" target="_blank" rel="noopener noreferrer">MeshQL API</a>
+          Powered by <a href="https://meshql.bayme.sh/docs" target="_blank" rel="noopener noreferrer">meShQL API</a>
           {' | '}
           <a href="https://github.com/baymesh/meshyview" target="_blank" rel="noopener noreferrer">Github</a>
         </p>
