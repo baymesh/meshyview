@@ -44,12 +44,43 @@ export interface ChatMessage {
   from_node_id: number;
   to_node_id: number;
   channel: string;
-  payload: string | { type: string; text?: string; [key: string]: unknown };
+  payload: string | { type: string; text?: string; reply_id?: number; emoji?: number | string; [key: string]: unknown };
   payload_hex?: string;
   portnum: number;
   import_time: string;
+  gateway_count?: number;
 }
 
 export interface ChatResponse {
   packets: ChatMessage[];
+}
+
+export interface Packet {
+  id: number;
+  from_id?: string;
+  to_id?: string;
+  from_node_id?: number;
+  to_node_id?: number;
+  channel: string;
+  portnum: number;
+  timestamp?: string;
+  import_time?: string;
+  rx_time?: number;
+  payload: string | { type: string; text?: string; [key: string]: unknown };
+  payload_hex?: string;
+  gateway_count?: number;
+}
+
+export interface TopGateway {
+  node_id: number;
+  packet_count: number;
+  id: string;
+  long_name: string;
+  short_name: string;
+  hw_model: string;
+  role: string;
+}
+
+export interface TopGatewaysResponse {
+  gateways: TopGateway[];
 }

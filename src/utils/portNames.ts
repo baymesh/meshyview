@@ -29,9 +29,9 @@ export const PORT_NUM_NAMES: Record<string, string> = {
   '257': 'ATAK_FORWARDER',
 };
 
-export function getPortNumName(portnum: string): string {
+export function getPortNumName(portnum: string, showNumber: boolean = true): string {
   const name = PORT_NUM_NAMES[portnum];
-  return name ? `${name} (${portnum})` : `Port ${portnum}`;
+  return name ? (showNumber ? `${name} (${portnum})` : name) : `Port ${portnum}`;
 }
 
 // Meshtastic broadcast address constant

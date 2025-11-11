@@ -1,4 +1,4 @@
-import type { NodesResponse, Stats, EdgesResponse, ChatResponse } from './types';
+import type { NodesResponse, Stats, EdgesResponse, ChatResponse, TopGatewaysResponse } from './types';
 
 const API_BASE_URL = 'https://meshql.bayme.sh';
 
@@ -81,6 +81,8 @@ export const api = {
     portnum?: number;
     channel?: string;
     decode_payload?: boolean;
+    includeGatewayCount?: boolean;
+    days_active?: number;
   }): Promise<{ packets: Array<{
     id: number;
     from_id?: string;
@@ -93,6 +95,7 @@ export const api = {
     import_time?: string;
     payload: string | { type: string; text?: string; [key: string]: unknown };
     payload_hex?: string;
+    gateway_count?: number;
   }> }> {
     const url = buildApiUrl('/api/packets', params);
     const response = await fetch(url);
@@ -105,6 +108,7 @@ export const api = {
   async getPacketDetail(packetId: number, params?: {
     decode_payload?: boolean;
     includeGateways?: boolean;
+    gatewayLimit?: number;
   }): Promise<{
     id: number;
     from_node_id: number;
@@ -149,6 +153,19 @@ export const api = {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch traceroute: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  async getTopGateways(params?: {
+    limit?: number;
+    since?: string;
+    channel?: string;
+  }): Promise<TopGatewaysResponse> {
+    const url = buildApiUrl('/api/gateways/top', params);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch top gateways: ${response.statusText}`);
     }
     return response.json();
   },

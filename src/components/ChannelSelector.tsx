@@ -7,7 +7,12 @@ interface ChannelSelectorProps {
 }
 
 export function ChannelSelector({ selectedChannel, onChannelChange, stats }: ChannelSelectorProps) {
-  const channels = stats?.nodes_by_channel ? Object.keys(stats.nodes_by_channel).sort() : [];
+  // Sort channels by node count (descending), not alphabetically
+  const channels = stats?.nodes_by_channel 
+    ? Object.entries(stats.nodes_by_channel)
+        .sort(([, countA], [, countB]) => countB - countA)
+        .map(([channel]) => channel)
+    : [];
 
   return (
     <div className="channel-selector">
@@ -19,7 +24,7 @@ export function ChannelSelector({ selectedChannel, onChannelChange, stats }: Cha
         <option value="">All Channels</option>
         {channels.map(channel => (
           <option key={channel} value={channel}>
-            {channel} ({stats?.nodes_by_channel[channel] || 0})
+            {channel}
           </option>
         ))}
       </select>
