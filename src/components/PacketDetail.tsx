@@ -56,8 +56,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   const [hasTracerouteData, setHasTracerouteData] = useState<boolean>(false);
   const [checkingTraceroute, setCheckingTraceroute] = useState<boolean>(false);
   const [relayMatches, setRelayMatches] = useState<Map<number, number[]>>(new Map());
-  const [ambiguousRelayCount, setAmbiguousRelayCount] = useState<number>(0);
-  const [refiningRelays, setRefiningRelays] = useState<boolean>(false);
+  const [_ambiguousRelayCount, setAmbiguousRelayCount] = useState<number>(0);
   const [refiningGateways, setRefiningGateways] = useState<Set<number>>(new Set());
   const hasShownNotification = useRef(false);
 
