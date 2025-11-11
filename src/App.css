@@ -1,3 +1,34 @@
+/* 🌈 Fun PR Demo Overlay */
+body::before {
+  content: "🚀 This is a pull request deployment!";
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background: linear-gradient(90deg, #ff0077, #ffcc00, #00e5ff);
+  background-size: 300% 100%;
+  color: white;
+  font-weight: bold;
+  font-family: monospace;
+  padding: 10px 16px;
+  border-radius: 12px;
+  box-shadow: 0 0 10px #0004;
+  animation: gradientShift 4s ease infinite, floaty 3s ease-in-out infinite;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
 * {
   box-sizing: border-box;
 }
