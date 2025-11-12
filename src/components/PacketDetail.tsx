@@ -804,6 +804,18 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                       const hasMultipleMatches = matches.length > 1;
                       const isRefining = refiningGateways.has(gw.node_id);
                       
+                      // Check if this gateway is also a relay node for other gateways
+                      const gatewaysRelayedByThis: number[] = [];
+                      gatewaysWithLocations.forEach(otherGw => {
+                        if (otherGw.node_id !== gw.node_id && otherGw.relay_node !== undefined && otherGw.relay_node !== null && relayMatches.has(otherGw.node_id)) {
+                          const otherMatches = relayMatches.get(otherGw.node_id)!;
+                          if (otherMatches.length === 1 && otherMatches[0] === gw.node_id) {
+                            gatewaysRelayedByThis.push(otherGw.node_id);
+                          }
+                        }
+                      });
+                      const isAlsoRelay = gatewaysRelayedByThis.length > 0;
+                      
                       return (
                         <Marker
                           key={gw.node_id}
@@ -852,6 +864,22 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                                   </button>
                                 )}
                                 {isRefining && <span style={{ marginLeft: '0.25rem' }}>⏳</span>}
+                              </div>
+                            )}
+                            {isAlsoRelay && (
+                              <div style={{ fontSize: '0.9em', color: '#666', marginTop: '0.25rem', borderTop: '1px solid #ddd', paddingTop: '0.25rem' }}>
+                                <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>Also relaying to:</div>
+                                {gatewaysRelayedByThis.map((relayedGwId) => (
+                                  <div key={relayedGwId} style={{ marginLeft: '0.5rem' }}>
+                                    <button 
+                                      className="popup-node-link"
+                                      onClick={() => onNodeClick(formatNodeId(relayedGwId))}
+                                      style={{ background: 'none', border: 'none', color: '#0366d6', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                    >
+                                      {nodeLookup?.getNode(relayedGwId)?.long_name || formatNodeId(relayedGwId)}
+                                    </button>
+                                  </div>
+                                ))}
                               </div>
                             )}
                             {hopInfo.showSignal && gw.rx_snr !== undefined && (
