@@ -78,6 +78,7 @@ export const api = {
     limit?: number;
     since?: string;
     node_id?: string;
+    gateway_id?: string;
     portnum?: number;
     channel?: string;
     decode_payload?: boolean;

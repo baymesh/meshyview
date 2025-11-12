@@ -67,6 +67,7 @@ interface Packet {
 type PacketFilter = 'all' | 'from' | 'to';
 type SortField = 'timestamp' | 'gateways';
 type SortDirection = 'asc' | 'desc';
+type TabType = 'neighbors' | 'packets' | 'heard';
 
 interface HistoricalPosition {
   lat: number;
@@ -138,11 +139,23 @@ function groupPositionsByLocation(packets: Packet[]): HistoricalPosition[] {
 export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeClick, onChannelMismatch }: NodeDetailProps) {
   const [node, setNode] = useState<Node | null>(null);
   const [packets, setPackets] = useState<Packet[]>([]);
+  const [heardPackets, setHeardPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [neighbors, setNeighbors] = useState<NodeNeighborsResponse | null>(null);
   const [neighborsLoading, setNeighborsLoading] = useState(false);
+  const [heardPacketsLoading, setHeardPacketsLoading] = useState(false);
   const hasShownNotification = useRef(false);
+  const hasLoadedNeighbors = useRef(false);
+  const hasLoadedPackets = useRef(false);
+  const hasLoadedHeardPackets = useRef(false);
+  
+  // Tab state from URL hash
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash === 'packets' || hash === 'heard') return hash;
+    return 'neighbors';
+  });
   const [selectedHistoricalIndex, setSelectedHistoricalIndex] = useState<Record<string, number>>({});
   const wsRef = useRef<WebSocket | null>(null);
   const [packetFilter, setPacketFilter] = useState<PacketFilter>('all');
@@ -197,7 +210,29 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   useEffect(() => {
     // Reset notification flag when nodeId changes
     hasShownNotification.current = false;
+    hasLoadedNeighbors.current = false;
+    hasLoadedPackets.current = false;
+    hasLoadedHeardPackets.current = false;
   }, [nodeId]);
+
+  // Handle URL hash changes for tab navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash === 'packets' || hash === 'heard' || hash === 'neighbors') {
+        setActiveTab(hash);
+      }
+    };
+    
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Update URL hash when tab changes
+  const switchTab = (tab: TabType) => {
+    setActiveTab(tab);
+    window.location.hash = tab;
+  };
 
   useEffect(() => {
     const fetchNodeDetails = async () => {
@@ -243,14 +278,8 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
           hasShownNotification.current = true;
         }
         
-        // Fetch recent packets for this node using the node's actual ID from API
-        const packetsData = await api.getPackets({
-          node_id: foundNode.id,
-          limit: 50,
-          decode_payload: true,
-          includeGatewayCount: true
-        });
-        setPackets(packetsData.packets || []);
+        // Don't load packets here - wait for tab activation
+        setPackets([]);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch node details');
         console.error('Error fetching node details:', err);
@@ -262,15 +291,16 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
     fetchNodeDetails();
   }, [nodeId, onChannelMismatch]);
 
-  // Fetch neighbors
+  // Fetch neighbors when tab becomes active
   useEffect(() => {
-    if (!node) return;
+    if (activeTab !== 'neighbors' || !node || hasLoadedNeighbors.current) return;
 
     const fetchNeighbors = async () => {
       try {
         setNeighborsLoading(true);
         const neighborsData = await api.getNodeNeighbors(node.node_id);
         setNeighbors(neighborsData);
+        hasLoadedNeighbors.current = true;
       } catch (err) {
         console.error('Error fetching neighbors:', err);
         setNeighbors(null);
@@ -280,11 +310,58 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
     };
 
     fetchNeighbors();
-  }, [node]);
+  }, [node, activeTab]);
 
-  // WebSocket subscription for real-time updates
+  // Fetch packets when tab becomes active
   useEffect(() => {
-    if (!node) return;
+    if (activeTab !== 'packets' || !node || hasLoadedPackets.current) return;
+
+    const fetchPackets = async () => {
+      try {
+        const packetsData = await api.getPackets({
+          node_id: node.id,
+          limit: 50,
+          decode_payload: true,
+          includeGatewayCount: true
+        });
+        setPackets(packetsData.packets || []);
+        hasLoadedPackets.current = true;
+      } catch (err) {
+        console.error('Error fetching packets:', err);
+      }
+    };
+
+    fetchPackets();
+  }, [node, activeTab]);
+
+  // Fetch packets heard when tab becomes active
+  useEffect(() => {
+    if (activeTab !== 'heard' || !node || hasLoadedHeardPackets.current) return;
+
+    const fetchHeardPackets = async () => {
+      try {
+        setHeardPacketsLoading(true);
+        const heardData = await api.getPackets({
+          gateway_id: formatNodeId(node.node_id),
+          limit: 50,
+          decode_payload: true,
+          includeGatewayCount: true
+        });
+        setHeardPackets(heardData.packets || []);
+        hasLoadedHeardPackets.current = true;
+      } catch (err) {
+        console.error('Error fetching heard packets:', err);
+      } finally {
+        setHeardPacketsLoading(false);
+      }
+    };
+
+    fetchHeardPackets();
+  }, [node, activeTab]);
+
+  // WebSocket subscription for real-time updates (only for packets tab)
+  useEffect(() => {
+    if (!node || activeTab !== 'packets') return;
 
     // Capture the current node_id to avoid stale closures
     const currentNodeNumericId = node.node_id;
@@ -367,10 +444,10 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
         ws.close();
       }
     };
-  // Only reconnect when node.id or node.node_id changes, not when node object changes
+  // Only reconnect when node.id, node.node_id, or activeTab changes
   // This prevents infinite reconnection loops when node state is updated via WebSocket
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node?.id, node?.node_id]);
+  }, [node?.id, node?.node_id, activeTab]);
 
   if (loading) {
     return <div className="loading">Loading node details...</div>;
@@ -644,151 +721,177 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
           </div>
         )}
 
-        {/* Neighbors section */}
-        <div className="node-neighbors-card">
-          <h3>Neighbors</h3>
-          {neighborsLoading ? (
-            <div className="neighbors-loading">Loading neighbors...</div>
-          ) : neighbors ? (
-            <div className="neighbors-grid">
-              {neighbors.heard_from.length > 0 && (
-                <div className="neighbors-section">
-                  <h4>Heard From ({neighbors.heard_from.filter(n => n.node_id !== node.node_id).length})</h4>
-                  <table className="neighbors-table">
-                    <thead>
-                      <tr>
-                        <th>Node</th>
-                        <th>Relay ID</th>
-                        <th>Packets</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {neighbors.heard_from
-                        .filter(n => n.node_id !== node.node_id)
-                        .sort((a, b) => b.packet_count - a.packet_count)
-                        .slice(0, 25)
-                        .map(neighbor => {
-                          const neighborNode = nodeLookup?.getNode(neighbor.node_id);
-                          return (
-                            <tr key={neighbor.node_id}>
-                              <td>
-                                <button 
-                                  className="node-link"
-                                  onClick={() => onNodeClick(formatNodeId(neighbor.node_id))}
-                                >
-                                  {neighborNode?.long_name || formatNodeId(neighbor.node_id)}
-                                </button>
-                              </td>
-                              <td>{neighbor.node_id & 255}</td>
-                              <td>{neighbor.packet_count}</td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                  {neighbors.heard_from.filter(n => n.node_id !== node.node_id).length > 25 && (
-                    <div className="neighbors-more">...and {neighbors.heard_from.filter(n => n.node_id !== node.node_id).length - 25} more</div>
-                  )}
-                </div>
-              )}
-              {neighbors.heard_by.length > 0 && (
-                <div className="neighbors-section">
-                  <h4>Heard By ({neighbors.heard_by.filter(n => n.node_id !== node.node_id).length})</h4>
-                  <table className="neighbors-table">
-                    <thead>
-                      <tr>
-                        <th>Node</th>
-                        <th>Relay ID</th>
-                        <th>Packets</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {neighbors.heard_by
-                        .filter(n => n.node_id !== node.node_id)
-                        .sort((a, b) => b.packet_count - a.packet_count)
-                        .slice(0, 25)
-                        .map(neighbor => {
-                          const neighborNode = nodeLookup?.getNode(neighbor.node_id);
-                          return (
-                            <tr key={neighbor.node_id}>
-                              <td>
-                                <button 
-                                  className="node-link"
-                                  onClick={() => onNodeClick(formatNodeId(neighbor.node_id))}
-                                >
-                                  {neighborNode?.long_name || formatNodeId(neighbor.node_id)}
-                                </button>
-                              </td>
-                              <td>{neighbor.node_id & 255}</td>
-                              <td>{neighbor.packet_count}</td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                  {neighbors.heard_by.filter(n => n.node_id !== node.node_id).length > 25 && (
-                    <div className="neighbors-more">...and {neighbors.heard_by.filter(n => n.node_id !== node.node_id).length - 25} more</div>
-                  )}
-                </div>
-              )}
-              {neighbors.heard_from.filter(n => n.node_id !== node.node_id).length === 0 && 
-               neighbors.heard_by.filter(n => n.node_id !== node.node_id).length === 0 && (
-                <div className="neighbors-empty">No neighbor data available</div>
-              )}
-            </div>
-          ) : (
-            <div className="neighbors-error">Failed to load neighbors</div>
-          )}
-        </div>
-
-        <div className="node-packets-card">
-          <div className="node-packets-header">
-            <h3>Recent Packets ({filteredAndSortedPackets.length})</h3>
-            <div className="packet-filter-selector">
-              <button
-                className={packetFilter === 'all' ? 'active' : ''}
-                onClick={() => setPacketFilter('all')}
-              >
-                All
-              </button>
-              <button
-                className={packetFilter === 'from' ? 'active' : ''}
-                onClick={() => setPacketFilter('from')}
-              >
-              From
+        {/* Tabbed interface for Neighbors, Recent Packets, and Packets Heard */}
+        <div className="node-tabs-container">
+          <div className="node-tabs">
+            <button
+              className={activeTab === 'neighbors' ? 'tab-active' : ''}
+              onClick={() => switchTab('neighbors')}
+            >
+              Neighbors
             </button>
             <button
-              className={packetFilter === 'to' ? 'active' : ''}
-              onClick={() => setPacketFilter('to')}
+              className={activeTab === 'packets' ? 'tab-active' : ''}
+              onClick={() => switchTab('packets')}
             >
-              To
+              Recent Packets
+            </button>
+            <button
+              className={activeTab === 'heard' ? 'tab-active' : ''}
+              onClick={() => switchTab('heard')}
+            >
+              Packets Heard
             </button>
           </div>
-            <div className="port-filter-selector">
-              <label>
-                Port:
-                <select value={selectedPort} onChange={(e) => setSelectedPort(e.target.value)}>
-                  <option value="all">All</option>
-                  {uniquePorts.map(port => (
-                    <option key={port} value={port}>
-                      {getPortNumName(port, false)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+
+          {/* Neighbors Tab */}
+          {activeTab === 'neighbors' && (
+            <div className="tab-content">
+              {neighborsLoading ? (
+                <div className="neighbors-loading">Loading neighbors...</div>
+              ) : neighbors ? (
+                <div className="neighbors-grid">
+                  {neighbors.heard_from.length > 0 && (
+                    <div className="neighbors-section">
+                      <h4>Heard From ({neighbors.heard_from.filter(n => n.node_id !== node.node_id).length})</h4>
+                      <table className="neighbors-table">
+                        <thead>
+                          <tr>
+                            <th>Node</th>
+                            <th>Relay ID</th>
+                            <th>Packets</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {neighbors.heard_from
+                            .filter(n => n.node_id !== node.node_id)
+                            .sort((a, b) => b.packet_count - a.packet_count)
+                            .slice(0, 25)
+                            .map(neighbor => {
+                              const neighborNode = nodeLookup?.getNode(neighbor.node_id);
+                              return (
+                                <tr key={neighbor.node_id}>
+                                  <td>
+                                    <button 
+                                      className="node-link"
+                                      onClick={() => onNodeClick(formatNodeId(neighbor.node_id))}
+                                    >
+                                      {neighborNode?.long_name || formatNodeId(neighbor.node_id)}
+                                    </button>
+                                  </td>
+                                  <td>{neighbor.node_id & 255}</td>
+                                  <td>{neighbor.packet_count}</td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                      {neighbors.heard_from.filter(n => n.node_id !== node.node_id).length > 25 && (
+                        <div className="neighbors-more">...and {neighbors.heard_from.filter(n => n.node_id !== node.node_id).length - 25} more</div>
+                      )}
+                    </div>
+                  )}
+                  {neighbors.heard_by.length > 0 && (
+                    <div className="neighbors-section">
+                      <h4>Heard By ({neighbors.heard_by.filter(n => n.node_id !== node.node_id).length})</h4>
+                      <table className="neighbors-table">
+                        <thead>
+                          <tr>
+                            <th>Node</th>
+                            <th>Relay ID</th>
+                            <th>Packets</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {neighbors.heard_by
+                            .filter(n => n.node_id !== node.node_id)
+                            .sort((a, b) => b.packet_count - a.packet_count)
+                            .slice(0, 25)
+                            .map(neighbor => {
+                              const neighborNode = nodeLookup?.getNode(neighbor.node_id);
+                              return (
+                                <tr key={neighbor.node_id}>
+                                  <td>
+                                    <button 
+                                      className="node-link"
+                                      onClick={() => onNodeClick(formatNodeId(neighbor.node_id))}
+                                    >
+                                      {neighborNode?.long_name || formatNodeId(neighbor.node_id)}
+                                    </button>
+                                  </td>
+                                  <td>{neighbor.node_id & 255}</td>
+                                  <td>{neighbor.packet_count}</td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                      {neighbors.heard_by.filter(n => n.node_id !== node.node_id).length > 25 && (
+                        <div className="neighbors-more">...and {neighbors.heard_by.filter(n => n.node_id !== node.node_id).length - 25} more</div>
+                      )}
+                    </div>
+                  )}
+                  {neighbors.heard_from.filter(n => n.node_id !== node.node_id).length === 0 && 
+                   neighbors.heard_by.filter(n => n.node_id !== node.node_id).length === 0 && (
+                    <div className="neighbors-empty">No neighbor data available</div>
+                  )}
+                </div>
+              ) : (
+                <div className="neighbors-error">Failed to load neighbors</div>
+              )}
             </div>
-          </div>
-          <div className="packets-table-container">
-            <table className="packets-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th 
-                    className="sortable"
-                    onClick={() => handleSort('timestamp')}
+          )}
+
+          {/* Recent Packets Tab */}
+          {activeTab === 'packets' && (
+            <div className="tab-content">
+              <div className="node-packets-header">
+                <h3>Recent Packets ({filteredAndSortedPackets.length})</h3>
+                <div className="packet-filter-selector">
+                  <button
+                    className={packetFilter === 'all' ? 'active' : ''}
+                    onClick={() => setPacketFilter('all')}
                   >
-                    Timestamp {sortField === 'timestamp' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </th>
+                    All
+                  </button>
+                  <button
+                    className={packetFilter === 'from' ? 'active' : ''}
+                    onClick={() => setPacketFilter('from')}
+                  >
+                    From
+                  </button>
+                  <button
+                    className={packetFilter === 'to' ? 'active' : ''}
+                    onClick={() => setPacketFilter('to')}
+                  >
+                    To
+                  </button>
+                </div>
+                <div className="port-filter-selector">
+                  <label>
+                    Port:
+                    <select value={selectedPort} onChange={(e) => setSelectedPort(e.target.value)}>
+                      <option value="all">All</option>
+                      {uniquePorts.map(port => (
+                        <option key={port} value={port}>
+                          {getPortNumName(port, false)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="packets-table-container">
+                <table className="packets-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th 
+                        className="sortable"
+                        onClick={() => handleSort('timestamp')}
+                      >
+                        Timestamp {sortField === 'timestamp' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
                   <th>From</th>
                   <th>To</th>
                   <th>Port</th>
@@ -855,6 +958,87 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
             )}
           </div>
         </div>
+      )}
+
+      {/* Packets Heard Tab */}
+      {activeTab === 'heard' && (
+        <div className="tab-content">
+          <div className="node-packets-header">
+            <h3>Packets Heard ({heardPackets.length})</h3>
+          </div>
+          {heardPacketsLoading ? (
+            <div className="packets-loading">Loading packets heard...</div>
+          ) : (
+            <div className="packets-table-container">
+              <table className="packets-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Timestamp</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Port</th>
+                    <th>Channel</th>
+                    <th>Gateways</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {heardPackets.map((pkt) => {
+                    const timestamp = pkt.timestamp || pkt.import_time || '';
+                    const fromNodeId = pkt.from_node_id || 0;
+                    const toNodeId = pkt.to_node_id || 0;
+                    
+                    return (
+                      <tr key={pkt.id}>
+                        <td>
+                          <button 
+                            className="packet-id-link"
+                            onClick={() => onPacketClick(pkt.id)}
+                          >
+                            {pkt.id}
+                          </button>
+                        </td>
+                        <td>{formatLocalDateTime(timestamp)}</td>
+                        <td>
+                          {isClickableNode(fromNodeId) ? (
+                            <button 
+                              className="node-link"
+                              onClick={() => handleNodeLinkClick(fromNodeId)}
+                            >
+                              {getNodeName(fromNodeId)}
+                            </button>
+                          ) : (
+                            getNodeName(fromNodeId)
+                          )}
+                        </td>
+                        <td>
+                          {isClickableNode(toNodeId) ? (
+                            <button 
+                              className="node-link"
+                              onClick={() => handleNodeLinkClick(toNodeId)}
+                            >
+                              {getNodeName(toNodeId)}
+                            </button>
+                          ) : (
+                            getNodeName(toNodeId)
+                          )}
+                        </td>
+                        <td>{getPortNumName(pkt.portnum.toString())}</td>
+                        <td>{pkt.channel}</td>
+                        <td>{pkt.gateway_count ?? '-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {heardPackets.length === 0 && (
+                <div className="no-packets">No packets heard</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
       </div>
     </div>
   );

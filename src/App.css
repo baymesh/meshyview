@@ -984,6 +984,50 @@ body {
   opacity: 0.6;
 }
 
+/* Tabs container */
+.node-tabs-container {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  grid-column: 1 / -1;
+  margin-top: 1rem;
+  overflow: hidden;
+}
+
+.node-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.node-tabs button {
+  flex: 1;
+  padding: 1rem 1.5rem;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.node-tabs button:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.node-tabs button.tab-active {
+  color: #0366d6;
+  border-bottom-color: #0366d6;
+  background: var(--bg-tertiary);
+}
+
+.tab-content {
+  padding: 1.5rem;
+}
+
 /* Neighbors section */
 .node-neighbors-card {
   background: var(--bg-tertiary);
