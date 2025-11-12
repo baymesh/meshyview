@@ -1,10 +1,49 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, LayersControl } from 'react-leaflet';
+import L from 'leaflet';
 import { api } from '../api';
 import { formatNodeId, getPortNumName, formatLocalDateTime } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
 import { TracerouteVisualization } from './TracerouteVisualization';
 import { NeighborInfoVisualization } from './NeighborInfoVisualization';
 import { parseTraceroutePayload } from '../utils/tracerouteParser';
+
+const { BaseLayer } = LayersControl;
+
+const COORDINATE_SCALE_FACTOR = 10000000;
+
+// Create custom icons for different hop counts
+const createHopIcon = (hopCount: number, isDirect: boolean) => {
+  const color = isDirect ? '#4CAF50' : hopCount <= 2 ? '#2196F3' : hopCount <= 4 ? '#FF9800' : '#f44336';
+  return L.divIcon({
+    className: 'custom-marker hop-marker',
+    html: `<div class="hop-pin" style="background: ${color};">
+      <span class="hop-count">${isDirect ? '0' : hopCount}</span>
+    </div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15]
+  });
+};
+
+// Create source icon with node's short name
+const createSourceIcon = (shortName: string) => {
+  return L.divIcon({
+    className: 'custom-marker source-marker',
+    html: `<div class="source-pin">${shortName}</div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20]
+  });
+};
+
+const ViaIcon = L.divIcon({
+  className: 'custom-marker via-marker',
+  html: '<div class="via-pin">VIA</div>',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+  popupAnchor: [0, -15]
+});
 
 // RSSI Quality thresholds for different Meshtastic channel presets (in dBm)
 const RSSI_THRESHOLDS: Record<string, { excellent: number; good: number; fair: number; marginal: number }> = {
@@ -58,7 +97,9 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   const [relayMatches, setRelayMatches] = useState<Map<number, number[]>>(new Map());
   const [_ambiguousRelayCount, setAmbiguousRelayCount] = useState<number>(0);
   const [refiningGateways, setRefiningGateways] = useState<Set<number>>(new Set());
+  const [mapExpanded, setMapExpanded] = useState(false);
   const hasShownNotification = useRef(false);
+  const mapCardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Reset notification flag when packetId changes
@@ -452,6 +493,460 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
             </div>
           )}
         </div>
+
+        {/* Map showing source and gateways */}
+        {packet.gateways && packet.gateways.length > 0 && (() => {
+          const sourceNode = nodeLookup?.getNode(packet.from_node_id);
+          const hasSourceLocation = sourceNode?.last_lat && sourceNode?.last_long && 
+                                   sourceNode.last_lat !== 0 && sourceNode.last_long !== 0;
+          
+          const gatewaysWithLocations = packet.gateways.filter(gw => {
+            const gwNode = nodeLookup?.getNode(gw.node_id);
+            return gwNode?.last_lat && gwNode?.last_long && 
+                   gwNode.last_lat !== 0 && gwNode.last_long !== 0;
+          });
+
+          if (!hasSourceLocation && gatewaysWithLocations.length === 0) {
+            return null;
+          }
+
+          // Calculate center point
+          const allLats: number[] = [];
+          const allLngs: number[] = [];
+          
+          if (hasSourceLocation) {
+            allLats.push(sourceNode.last_lat! / COORDINATE_SCALE_FACTOR);
+            allLngs.push(sourceNode.last_long! / COORDINATE_SCALE_FACTOR);
+          }
+          
+          gatewaysWithLocations.forEach(gw => {
+            const gwNode = nodeLookup?.getNode(gw.node_id);
+            if (gwNode && gwNode.last_lat && gwNode.last_long) {
+              allLats.push(gwNode.last_lat / COORDINATE_SCALE_FACTOR);
+              allLngs.push(gwNode.last_long / COORDINATE_SCALE_FACTOR);
+            }
+          });
+
+          const centerLat = allLats.reduce((a, b) => a + b, 0) / allLats.length;
+          const centerLng = allLngs.reduce((a, b) => a + b, 0) / allLngs.length;
+
+          // Create a key that only includes packet ID and expanded state
+          // Don't include relayMatches as that would reset the map view on refinement
+          const mapKey = `map-${packet.id}-${mapExpanded}`;
+
+          return (
+            <div className="packet-map-card" ref={mapCardRef}>
+              <h3>Gateway Locations</h3>
+              <div className="packet-map">
+                <MapContainer
+                  key={mapKey}
+                  center={[centerLat, centerLng]}
+                  zoom={10}
+                  style={{ height: mapExpanded ? '800px' : '400px', width: '100%' }}
+                  closePopupOnClick={false}
+                >
+                  <LayersControl position="topright">
+                    <BaseLayer checked name="Street Map">
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                    </BaseLayer>
+                    
+                    <BaseLayer name="Satellite">
+                      <TileLayer
+                        attribution='Imagery &copy; <a href="https://www.esri.com/">Esri</a>'
+                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                      />
+                    </BaseLayer>
+                    
+                    <BaseLayer name="Terrain">
+                      <TileLayer
+                        attribution='Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+                        url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+                      />
+                    </BaseLayer>
+                  </LayersControl>
+
+                  {/* Lines for connections */}
+                  {hasSourceLocation && gatewaysWithLocations.map(gw => {
+                    const gwNode = nodeLookup?.getNode(gw.node_id);
+                    if (!gwNode) return null;
+                    
+                    const hopInfo = getHopInfo(gw, packet.from_node_id);
+                    const isDirect = hopInfo.hopCount === 0;
+                    const isSelfGated = gw.node_id === packet.from_node_id;
+                    
+                    // Skip line for self-gated (same position)
+                    if (isSelfGated) return null;
+                    
+                    // Skip if no valid location
+                    if (!gwNode.last_lat || !gwNode.last_long) return null;
+                    
+                    const gwLat = gwNode.last_lat / COORDINATE_SCALE_FACTOR;
+                    const gwLng = gwNode.last_long / COORDINATE_SCALE_FACTOR;
+                    
+                    // For direct connections, draw line from source to gateway
+                    if (isDirect) {
+                      return (
+                        <Polyline
+                          key={`line-direct-${gw.node_id}`}
+                          positions={[
+                            [sourceNode.last_lat! / COORDINATE_SCALE_FACTOR, sourceNode.last_long! / COORDINATE_SCALE_FACTOR],
+                            [gwLat, gwLng]
+                          ]}
+                          pathOptions={{
+                            color: '#4CAF50',
+                            weight: 3,
+                            opacity: 0.8,
+                            dashArray: '5, 5'
+                          }}
+                        />
+                      );
+                    }
+                    
+                    // For relayed connections, check if we have a definitive relay node
+                    if (gw.relay_node !== undefined && gw.relay_node !== null && relayMatches.has(gw.node_id)) {
+                      const matches = relayMatches.get(gw.node_id)!;
+                      if (matches.length === 1) {
+                        const relayNode = nodeLookup?.getNode(matches[0]);
+                        if (relayNode?.last_lat && relayNode?.last_long && 
+                            relayNode.last_lat !== 0 && relayNode.last_long !== 0) {
+                          // Draw line from relay to gateway
+                          return (
+                            <Polyline
+                              key={`line-relay-${gw.node_id}`}
+                              positions={[
+                                [relayNode.last_lat / COORDINATE_SCALE_FACTOR, relayNode.last_long / COORDINATE_SCALE_FACTOR],
+                                [gwLat, gwLng]
+                              ]}
+                              pathOptions={{
+                                color: '#FF9800',
+                                weight: 3,
+                                opacity: 0.8,
+                                dashArray: '8, 4'
+                              }}
+                            />
+                          );
+                        }
+                      }
+                    }
+                    
+                    return null;
+                  })}
+
+                  {/* Via node markers and lines (relay nodes that are not gateways) */}
+                  {hasSourceLocation && (() => {
+                    // Group via nodes by their node_id
+                    const viaNodeMap = new Map<number, number[]>();
+                    
+                    gatewaysWithLocations.forEach(gw => {
+                      if (gw.relay_node === undefined || gw.relay_node === null || !relayMatches.has(gw.node_id)) {
+                        return;
+                      }
+                      
+                      const matches = relayMatches.get(gw.node_id)!;
+                      if (matches.length !== 1) return;
+                      
+                      const viaNodeId = matches[0];
+                      const viaNode = nodeLookup?.getNode(viaNodeId);
+                      
+                      // Check if via node has location
+                      if (!viaNode?.last_lat || !viaNode?.last_long || 
+                          viaNode.last_lat === 0 || viaNode.last_long === 0) {
+                        return;
+                      }
+                      
+                      // Check if via node is NOT a gateway
+                      const isGateway = packet.gateways?.some(gateway => gateway.node_id === viaNodeId);
+                      if (isGateway) return;
+                      
+                      // Add gateway to this via node's list
+                      if (!viaNodeMap.has(viaNodeId)) {
+                        viaNodeMap.set(viaNodeId, []);
+                      }
+                      viaNodeMap.get(viaNodeId)!.push(gw.node_id);
+                    });
+                    
+                    // Render one marker per via node with all its connected gateways
+                    return Array.from(viaNodeMap.entries()).map(([viaNodeId, gwNodeIds]) => {
+                      const viaNode = nodeLookup?.getNode(viaNodeId);
+                      if (!viaNode || !viaNode.last_lat || !viaNode.last_long) return null;
+                      
+                      const viaLat = viaNode.last_lat / COORDINATE_SCALE_FACTOR;
+                      const viaLng = viaNode.last_long / COORDINATE_SCALE_FACTOR;
+                      
+                      return (
+                        <React.Fragment key={`via-${viaNodeId}`}>
+                          {/* Lines from source to via node */}
+                          <Polyline
+                            positions={[
+                              [sourceNode.last_lat! / COORDINATE_SCALE_FACTOR, sourceNode.last_long! / COORDINATE_SCALE_FACTOR],
+                              [viaLat, viaLng]
+                            ]}
+                            pathOptions={{
+                              color: '#FFC107',
+                              weight: 3,
+                              opacity: 0.8,
+                              dashArray: '8, 4'
+                            }}
+                          />
+                          {/* Via node marker */}
+                          <Marker
+                            position={[viaLat, viaLng]}
+                            icon={ViaIcon}
+                          >
+                            <Popup>
+                              <div style={{ fontWeight: 'bold' }}>Via Node (Relay)</div>
+                              <div>
+                                <button 
+                                  className="popup-node-link"
+                                  onClick={() => onNodeClick(formatNodeId(viaNodeId))}
+                                  style={{ background: 'none', border: 'none', color: '#0366d6', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                >
+                                  {viaNode.long_name || formatNodeId(viaNodeId)}
+                                </button>
+                              </div>
+                              <div style={{ fontSize: '0.9em', color: '#666', marginTop: '0.25rem' }}>
+                                Relayed to:
+                                {gwNodeIds.map((gwNodeId) => (
+                                  <div key={gwNodeId} style={{ marginLeft: '0.5rem' }}>
+                                    <button 
+                                      className="popup-node-link"
+                                      onClick={() => onNodeClick(formatNodeId(gwNodeId))}
+                                      style={{ background: 'none', border: 'none', color: '#0366d6', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                    >
+                                      {nodeLookup?.getNode(gwNodeId)?.long_name || formatNodeId(gwNodeId)}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </Popup>
+                          </Marker>
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
+
+                  {/* Source node marker (or combined self-gated marker) */}
+                  {hasSourceLocation && (() => {
+                    const selfGatedGateway = gatewaysWithLocations.find(gw => gw.node_id === packet.from_node_id);
+                    const sourceShortName = sourceNode.short_name || sourceNode.long_name?.substring(0, 4) || formatNodeId(packet.from_node_id).substring(0, 4);
+                    
+                    if (selfGatedGateway) {
+                      // Combined marker for self-gated packet
+                      const hopInfo = getHopInfo(selfGatedGateway, packet.from_node_id);
+                      return (
+                        <Marker
+                          position={[
+                            sourceNode.last_lat! / COORDINATE_SCALE_FACTOR,
+                            sourceNode.last_long! / COORDINATE_SCALE_FACTOR
+                          ]}
+                          icon={createSourceIcon(sourceShortName)}
+                        >
+                          <Popup>
+                            <div style={{ fontWeight: 'bold' }}>Source Node (Self Gated)</div>
+                            <div>
+                              <button 
+                                className="popup-node-link"
+                                onClick={() => onNodeClick(formatNodeId(packet.from_node_id))}
+                                style={{ background: 'none', border: 'none', color: '#0366d6', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                              >
+                                {sourceNode.long_name || formatNodeId(packet.from_node_id)}
+                              </button>
+                            </div>
+                            <div style={{ fontSize: '0.9em', color: '#666', marginTop: '0.25rem' }}>
+                              {hopInfo.hopText}
+                            </div>
+                            {hopInfo.showSignal && selfGatedGateway.rx_snr !== undefined && (
+                              <div style={{ fontSize: '0.9em', marginTop: '0.25rem' }}>
+                                SNR: {selfGatedGateway.rx_snr} dB<br />
+                                RSSI: {selfGatedGateway.rx_rssi} dBm
+                              </div>
+                            )}
+                          </Popup>
+                        </Marker>
+                      );
+                    }
+                    
+                    // Regular source marker
+                    return (
+                      <Marker
+                        position={[
+                          sourceNode.last_lat! / COORDINATE_SCALE_FACTOR,
+                          sourceNode.last_long! / COORDINATE_SCALE_FACTOR
+                        ]}
+                        icon={createSourceIcon(sourceShortName)}
+                      >
+                        <Popup>
+                          <div style={{ fontWeight: 'bold' }}>Source Node</div>
+                          <div>
+                            <button 
+                              className="popup-node-link"
+                              onClick={() => onNodeClick(formatNodeId(packet.from_node_id))}
+                              style={{ background: 'none', border: 'none', color: '#0366d6', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                            >
+                              {sourceNode.long_name || formatNodeId(packet.from_node_id)}
+                            </button>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  })()}
+
+                  {/* Gateway markers (excluding self-gated) */}
+                  {gatewaysWithLocations
+                    .filter(gw => gw.node_id !== packet.from_node_id)
+                    .map(gw => {
+                      const gwNode = nodeLookup?.getNode(gw.node_id);
+                      if (!gwNode) return null;
+                      
+                      const hopInfo = getHopInfo(gw, packet.from_node_id);
+                      const isDirect = hopInfo.hopCount === 0;
+                      const hasRelayInfo = hopInfo.hopCount > 0 && gw.relay_node !== undefined && gw.relay_node !== null && relayMatches.has(gw.node_id);
+                      const matches = hasRelayInfo ? relayMatches.get(gw.node_id)! : [];
+                      const hasMultipleMatches = matches.length > 1;
+                      const isRefining = refiningGateways.has(gw.node_id);
+                      
+                      // Check if this gateway is also a relay node for other gateways
+                      const gatewaysRelayedByThis: number[] = [];
+                      gatewaysWithLocations.forEach(otherGw => {
+                        if (otherGw.node_id !== gw.node_id && otherGw.relay_node !== undefined && otherGw.relay_node !== null && relayMatches.has(otherGw.node_id)) {
+                          const otherMatches = relayMatches.get(otherGw.node_id)!;
+                          if (otherMatches.length === 1 && otherMatches[0] === gw.node_id) {
+                            gatewaysRelayedByThis.push(otherGw.node_id);
+                          }
+                        }
+                      });
+                      const isAlsoRelay = gatewaysRelayedByThis.length > 0;
+                      
+                      // Skip if no valid location
+                      if (!gwNode.last_lat || !gwNode.last_long) return null;
+                      
+                      return (
+                        <Marker
+                          key={gw.node_id}
+                          position={[
+                            gwNode.last_lat / COORDINATE_SCALE_FACTOR,
+                            gwNode.last_long / COORDINATE_SCALE_FACTOR
+                          ]}
+                          icon={createHopIcon(hopInfo.hopCount, isDirect)}
+                        >
+                          <Popup>
+                            <div style={{ fontWeight: 'bold' }}>
+                              <button 
+                                className="popup-node-link"
+                                onClick={() => onNodeClick(formatNodeId(gw.node_id))}
+                                style={{ background: 'none', border: 'none', color: '#0366d6', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontWeight: 'bold' }}
+                              >
+                                {gwNode.long_name || formatNodeId(gw.node_id)}
+                              </button>
+                            </div>
+                            <div style={{ fontSize: '0.9em', color: '#666' }}>
+                              {hopInfo.hopText}
+                            </div>
+                            {hasRelayInfo && (
+                              <div style={{ fontSize: '0.9em', color: '#666', marginTop: '0.25rem' }}>
+                                via {matches.map((nodeId, idx) => (
+                                  <span key={nodeId}>
+                                    {idx > 0 && ' or '}
+                                    <button 
+                                      className="popup-node-link"
+                                      onClick={() => onNodeClick(formatNodeId(nodeId))}
+                                      style={{ background: 'none', border: 'none', color: '#0366d6', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                    >
+                                      {getNodeName(nodeId)}
+                                    </button>
+                                  </span>
+                                ))}
+                                {hasMultipleMatches && !isRefining && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); refineSingleRelay(gw.node_id, gw.relay_node!); }}
+                                    style={{ background: 'none', border: 'none', color: '#64b5f6', cursor: 'pointer', fontSize: '0.9em', padding: '0.1rem 0.3rem', marginLeft: '0.25rem', opacity: 0.7 }}
+                                    title="Refine to find best match"
+                                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                                  >
+                                    ⚡
+                                  </button>
+                                )}
+                                {isRefining && <span style={{ marginLeft: '0.25rem' }}>⏳</span>}
+                              </div>
+                            )}
+                            {isAlsoRelay && (
+                              <div style={{ fontSize: '0.9em', color: '#666', marginTop: '0.25rem', borderTop: '1px solid #ddd', paddingTop: '0.25rem' }}>
+                                <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>Also relaying to:</div>
+                                {gatewaysRelayedByThis.map((relayedGwId) => (
+                                  <div key={relayedGwId} style={{ marginLeft: '0.5rem' }}>
+                                    <button 
+                                      className="popup-node-link"
+                                      onClick={() => onNodeClick(formatNodeId(relayedGwId))}
+                                      style={{ background: 'none', border: 'none', color: '#0366d6', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                    >
+                                      {nodeLookup?.getNode(relayedGwId)?.long_name || formatNodeId(relayedGwId)}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {hopInfo.showSignal && gw.rx_snr !== undefined && (
+                              <div style={{ fontSize: '0.9em', marginTop: '0.25rem' }}>
+                                SNR: {gw.rx_snr} dB<br />
+                                RSSI: {gw.rx_rssi} dBm
+                              </div>
+                            )}
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
+                </MapContainer>
+                <div className="map-legend">
+                  <div className="legend-item">
+                    <span className="legend-marker" style={{ background: '#4CAF50' }}>0</span>
+                    <span>Direct (0 hops)</span>
+                  </div>
+                  <div className="legend-item">
+                    <span className="legend-marker" style={{ background: '#2196F3' }}>1-2</span>
+                    <span>1-2 hops</span>
+                  </div>
+                  <div className="legend-item">
+                    <span className="legend-marker" style={{ background: '#FF9800' }}>3-4</span>
+                    <span>3-4 hops</span>
+                  </div>
+                  <div className="legend-item">
+                    <span className="legend-marker" style={{ background: '#f44336' }}>5+</span>
+                    <span>5+ hops</span>
+                  </div>
+                </div>
+              </div>
+              <button 
+                className="map-expand-button"
+                onClick={() => {
+                  const willExpand = !mapExpanded;
+                  setMapExpanded(willExpand);
+                  if (willExpand && mapCardRef.current) {
+                    setTimeout(() => {
+                      mapCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                  }
+                }}
+                title={mapExpanded ? "Collapse map" : "Expand map"}
+              >
+                {mapExpanded ? (
+                  <>
+                    <span>Collapse</span>
+                    <span style={{ marginLeft: '0.5rem' }}>▲</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Expand</span>
+                    <span style={{ marginLeft: '0.5rem' }}>▼</span>
+                  </>
+                )}
+              </button>
+            </div>
+          );
+        })()}
 
         <div className="packet-payload-card">
           <h3>Payload</h3>
