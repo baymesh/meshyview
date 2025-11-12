@@ -98,6 +98,9 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   const [_ambiguousRelayCount, setAmbiguousRelayCount] = useState<number>(0);
   const [refiningGateways, setRefiningGateways] = useState<Set<number>>(new Set());
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [autoRefining, setAutoRefining] = useState(false);
+  const [clickCount, setClickCount] = useState(0);
+  const clickTimeoutRef = useRef<number | null>(null);
   const hasShownNotification = useRef(false);
   const mapCardRef = useRef<HTMLDivElement>(null);
 
@@ -237,6 +240,56 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
         setAmbiguousRelayCount(stillAmbiguous);
         return prev;
       });
+    }
+  };
+
+  // Auto-refine all ambiguous relay nodes (easter egg)
+  const autoRefineAllRelays = async () => {
+    if (!packet?.gateways || autoRefining) return;
+    
+    // Get all gateways with ambiguous relay matches
+    const ambiguousGateways = packet.gateways.filter(gw => {
+      if (!gw.relay_node || !relayMatches.has(gw.node_id)) return false;
+      const matches = relayMatches.get(gw.node_id)!;
+      return matches.length > 1;
+    });
+    
+    if (ambiguousGateways.length === 0) return;
+    
+    setAutoRefining(true);
+    
+    // Process each gateway with 1 second delay
+    for (let i = 0; i < ambiguousGateways.length; i++) {
+      const gw = ambiguousGateways[i];
+      await refineSingleRelay(gw.node_id, gw.relay_node!);
+      
+      // Wait 3 seconds before next request (except for last one)
+      if (i < ambiguousGateways.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+    }
+    
+    setAutoRefining(false);
+  };
+
+  // Handle triple-click on Gateways header
+  const handleGatewaysHeaderClick = () => {
+    setClickCount(prev => prev + 1);
+    
+    // Clear existing timeout
+    if (clickTimeoutRef.current) {
+      clearTimeout(clickTimeoutRef.current);
+    }
+    
+    // Set timeout to reset click count
+    clickTimeoutRef.current = setTimeout(() => {
+      setClickCount(0);
+    }, 500);
+    
+    // Trigger auto-refine on third click
+    if (clickCount + 1 === 3) {
+      setClickCount(0);
+      autoRefineAllRelays();
     }
   };
 
@@ -963,7 +1016,13 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
           <div className="packet-gateways-card">
             <div className="gateways-header">
               <div>
-                <h3>Gateways ({packet.gateways.length})</h3>
+                <h3 
+                  onClick={handleGatewaysHeaderClick}
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                >
+                  Gateways ({packet.gateways.length})
+                  {autoRefining && <span style={{ marginLeft: '0.5rem', fontSize: '0.9em' }}>Auto-refining...</span>}
+                </h3>
                 <p className="gateways-desc">Nodes that heard this packet:</p>
               </div>
             </div>
