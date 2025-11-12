@@ -179,6 +179,8 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   const [selectedPort, setSelectedPort] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('timestamp');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const mapCardRef = useRef<HTMLDivElement>(null);
 
   // Filter and sort packets - must be before useEffect hooks
   const filteredAndSortedPackets = useMemo(() => {
@@ -686,14 +688,15 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
         </div>
 
         {coordinates && (
-          <div className="node-map-card">
+          <div className="node-map-card" ref={mapCardRef}>
             <h3>Location</h3>
             <div className="node-map">
               <MapContainer
-                key={node.id}
+                key={`${node.id}-${mapExpanded}`}
                 center={coordinates}
                 zoom={13}
-                style={{ height: '300px', width: '100%' }}
+                style={{ height: mapExpanded ? '800px' : '300px', width: '100%' }}
+                closePopupOnClick={false}
               >
                 <LayersControl position="topright">
                   <BaseLayer checked name="Street Map">
@@ -792,6 +795,31 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                 ))}
               </MapContainer>
             </div>
+            <button 
+              className="map-expand-button"
+              onClick={() => {
+                const willExpand = !mapExpanded;
+                setMapExpanded(willExpand);
+                if (willExpand && mapCardRef.current) {
+                  setTimeout(() => {
+                    mapCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 100);
+                }
+              }}
+              title={mapExpanded ? "Collapse map" : "Expand map"}
+            >
+              {mapExpanded ? (
+                <>
+                  <span>Collapse</span>
+                  <span style={{ marginLeft: '0.5rem' }}>▲</span>
+                </>
+              ) : (
+                <>
+                  <span>Expand</span>
+                  <span style={{ marginLeft: '0.5rem' }}>▼</span>
+                </>
+              )}
+            </button>
           </div>
         )}
 

@@ -99,6 +99,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   const [refiningGateways, setRefiningGateways] = useState<Set<number>>(new Set());
   const [mapExpanded, setMapExpanded] = useState(false);
   const hasShownNotification = useRef(false);
+  const mapCardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Reset notification flag when packetId changes
@@ -534,7 +535,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
           const mapKey = `map-${packet.id}-${mapExpanded}`;
 
           return (
-            <div className="packet-map-card">
+            <div className="packet-map-card" ref={mapCardRef}>
               <h3>Gateway Locations</h3>
               <div className="packet-map">
                 <MapContainer
@@ -920,7 +921,15 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
               </div>
               <button 
                 className="map-expand-button"
-                onClick={() => setMapExpanded(!mapExpanded)}
+                onClick={() => {
+                  const willExpand = !mapExpanded;
+                  setMapExpanded(willExpand);
+                  if (willExpand && mapCardRef.current) {
+                    setTimeout(() => {
+                      mapCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                  }
+                }}
                 title={mapExpanded ? "Collapse map" : "Expand map"}
               >
                 {mapExpanded ? (

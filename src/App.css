@@ -852,6 +852,11 @@ body {
   border: 1px solid var(--border-color);
 }
 
+.node-map-card {
+  display: flex;
+  flex-direction: column;
+}
+
 .node-packets-card {
   margin-top: 1rem;
 }
