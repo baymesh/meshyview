@@ -35,6 +35,23 @@ const HistoricalIcon = L.icon({
   className: 'historical-marker'
 });
 
+// Create icons for neighbor nodes
+const HeardFromIcon = L.divIcon({
+  className: 'custom-marker heard-from-marker',
+  html: '<div class="marker-pin heard-from-pin"></div>',
+  iconSize: [20, 20],
+  iconAnchor: [10, 20],
+  popupAnchor: [0, -20]
+});
+
+const HeardByIcon = L.divIcon({
+  className: 'custom-marker heard-by-marker',
+  html: '<div class="marker-pin heard-by-pin"></div>',
+  iconSize: [20, 20],
+  iconAnchor: [10, 20],
+  popupAnchor: [0, -20]
+});
+
 L.Marker.prototype.options.icon = DefaultIcon;
 
 const COORDINATE_SCALE_FACTOR = 10000000;
@@ -707,6 +724,63 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                     <div>{node.long_name}</div>
                   </Popup>
                 </Marker>
+                
+                {/* Heard From neighbors */}
+                {neighbors?.heard_from
+                  .filter(n => n.node_id !== node.node_id)
+                  .map(neighbor => {
+                    const neighborNode = nodeLookup?.getNode(neighbor.node_id);
+                    if (!neighborNode?.last_lat || !neighborNode?.last_long || 
+                        neighborNode.last_lat === 0 || neighborNode.last_long === 0) {
+                      return null;
+                    }
+                    const lat = neighborNode.last_lat / COORDINATE_SCALE_FACTOR;
+                    const lng = neighborNode.last_long / COORDINATE_SCALE_FACTOR;
+                    return (
+                      <Marker
+                        key={`heard-from-${neighbor.node_id}`}
+                        position={[lat, lng]}
+                        icon={HeardFromIcon}
+                      >
+                        <Popup>
+                          <div style={{ fontWeight: 'bold' }}>Heard From</div>
+                          <div>{neighborNode.long_name || formatNodeId(neighbor.node_id)}</div>
+                          <div style={{ fontSize: '0.9em', color: '#666' }}>
+                            {neighbor.packet_count} packets
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  })}
+                
+                {/* Heard By neighbors */}
+                {neighbors?.heard_by
+                  .filter(n => n.node_id !== node.node_id)
+                  .map(neighbor => {
+                    const neighborNode = nodeLookup?.getNode(neighbor.node_id);
+                    if (!neighborNode?.last_lat || !neighborNode?.last_long || 
+                        neighborNode.last_lat === 0 || neighborNode.last_long === 0) {
+                      return null;
+                    }
+                    const lat = neighborNode.last_lat / COORDINATE_SCALE_FACTOR;
+                    const lng = neighborNode.last_long / COORDINATE_SCALE_FACTOR;
+                    return (
+                      <Marker
+                        key={`heard-by-${neighbor.node_id}`}
+                        position={[lat, lng]}
+                        icon={HeardByIcon}
+                      >
+                        <Popup>
+                          <div style={{ fontWeight: 'bold' }}>Heard By</div>
+                          <div>{neighborNode.long_name || formatNodeId(neighbor.node_id)}</div>
+                          <div style={{ fontSize: '0.9em', color: '#666' }}>
+                            {neighbor.packet_count} packets
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  })}
+                
                 {filteredHistoricalPositions.map((position, idx) => (
                   <Marker 
                     key={`${position.lat},${position.lng}-${idx}`}
