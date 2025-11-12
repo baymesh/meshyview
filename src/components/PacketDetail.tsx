@@ -520,7 +520,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
           
           gatewaysWithLocations.forEach(gw => {
             const gwNode = nodeLookup?.getNode(gw.node_id);
-            if (gwNode) {
+            if (gwNode && gwNode.last_lat && gwNode.last_long) {
               allLats.push(gwNode.last_lat / COORDINATE_SCALE_FACTOR);
               allLngs.push(gwNode.last_long / COORDINATE_SCALE_FACTOR);
             }
@@ -578,6 +578,9 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                     
                     // Skip line for self-gated (same position)
                     if (isSelfGated) return null;
+                    
+                    // Skip if no valid location
+                    if (!gwNode.last_lat || !gwNode.last_long) return null;
                     
                     const gwLat = gwNode.last_lat / COORDINATE_SCALE_FACTOR;
                     const gwLng = gwNode.last_long / COORDINATE_SCALE_FACTOR;
@@ -667,7 +670,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                     // Render one marker per via node with all its connected gateways
                     return Array.from(viaNodeMap.entries()).map(([viaNodeId, gwNodeIds]) => {
                       const viaNode = nodeLookup?.getNode(viaNodeId);
-                      if (!viaNode) return null;
+                      if (!viaNode || !viaNode.last_lat || !viaNode.last_long) return null;
                       
                       const viaLat = viaNode.last_lat / COORDINATE_SCALE_FACTOR;
                       const viaLng = viaNode.last_long / COORDINATE_SCALE_FACTOR;
@@ -705,7 +708,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                               </div>
                               <div style={{ fontSize: '0.9em', color: '#666', marginTop: '0.25rem' }}>
                                 Relayed to:
-                                {gwNodeIds.map((gwNodeId, idx) => (
+                                {gwNodeIds.map((gwNodeId) => (
                                   <div key={gwNodeId} style={{ marginLeft: '0.5rem' }}>
                                     <button 
                                       className="popup-node-link"
@@ -815,6 +818,9 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                         }
                       });
                       const isAlsoRelay = gatewaysRelayedByThis.length > 0;
+                      
+                      // Skip if no valid location
+                      if (!gwNode.last_lat || !gwNode.last_long) return null;
                       
                       return (
                         <Marker
