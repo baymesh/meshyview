@@ -95,3 +95,21 @@ export interface NodeNeighborsResponse {
   heard_by: NodeNeighbor[];
   heard_from: NodeNeighbor[];
 }
+
+export interface NodeGraphEdge {
+  source: number;
+  target: number;
+  packet_count: number;
+}
+
+export interface NodeGraphResponse {
+  edges: NodeGraphEdge[];
+  metadata: {
+    channel: string;
+    with_location: boolean;
+    hours: number;
+    node_count: number;
+    edge_count: number;
+    generated_at: string;
+  };
+}

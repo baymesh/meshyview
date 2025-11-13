@@ -1,7 +1,8 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl, Polyline } from 'react-leaflet';
 import { useEffect, useState } from 'react';
 import L from 'leaflet';
-import type { Node } from '../types';
+import type { Node, NodeGraphEdge } from '../types';
+import { api } from '../api';
 import 'leaflet/dist/leaflet.css';
 
 const { BaseLayer } = LayersControl;
@@ -28,6 +29,9 @@ interface MeshMapProps {
   nodes: Node[];
   onNodeClick?: (nodeId: string) => void;
   recentlyUpdatedNodes?: Map<number, number>; // node_id -> timestamp
+  showConnections?: boolean;
+  connectionChannel?: string;
+  connectionHours?: number;
 }
 
 // Meshtastic stores coordinates as integers (lat/lon * 10^7)
@@ -113,8 +117,16 @@ function MapViewController({ nodes }: { nodes: Node[] }) {
   return null;
 }
 
-export function MeshMap({ nodes, onNodeClick, recentlyUpdatedNodes }: MeshMapProps) {
+export function MeshMap({ 
+  nodes, 
+  onNodeClick, 
+  recentlyUpdatedNodes,
+  showConnections = false,
+  connectionChannel = 'MediumFast',
+  connectionHours = 24
+}: MeshMapProps) {
   const [, forceUpdate] = useState({});
+  const [connections, setConnections] = useState<NodeGraphEdge[]>([]);
   
   // Force re-render every second to update glow effect
   useEffect(() => {
@@ -126,11 +138,45 @@ export function MeshMap({ nodes, onNodeClick, recentlyUpdatedNodes }: MeshMapPro
     
     return () => clearInterval(interval);
   }, [recentlyUpdatedNodes]);
+
+  // Fetch node connections when requested
+  useEffect(() => {
+    if (!showConnections) {
+      setConnections([]);
+      return;
+    }
+
+    const fetchConnections = async () => {
+      try {
+        const graphData = await api.getNodeGraph({
+          channel: connectionChannel,
+          with_location: true,
+          hours: connectionHours
+        });
+        setConnections(graphData.edges);
+      } catch (err) {
+        console.error('Error fetching node connections:', err);
+        setConnections([]);
+      }
+    };
+
+    fetchConnections();
+  }, [showConnections, connectionChannel, connectionHours]);
   
   // Filter nodes with valid coordinates
   const nodesWithLocation = nodes.filter(
     (node) => node.last_lat !== null && node.last_long !== null
   );
+
+  // Create a map of node_id to coordinates for drawing connections
+  const nodeCoordinates = new Map<number, [number, number]>();
+  nodesWithLocation.forEach((node) => {
+    const coords: [number, number] = [
+      node.last_lat! / COORDINATE_SCALE_FACTOR,
+      node.last_long! / COORDINATE_SCALE_FACTOR
+    ];
+    nodeCoordinates.set(node.node_id, coords);
+  });
 
   // Convert coordinates from integers to decimal degrees
   const convertCoordinates = (lat: number, lon: number): [number, number] => {
@@ -214,6 +260,34 @@ export function MeshMap({ nodes, onNodeClick, recentlyUpdatedNodes }: MeshMapPro
           />
         </BaseLayer>
       </LayersControl>
+
+      {/* Draw connection lines between nodes */}
+      {showConnections && connections.map((edge, index) => {
+        const sourceCoords = nodeCoordinates.get(edge.source);
+        const targetCoords = nodeCoordinates.get(edge.target);
+        
+        if (!sourceCoords || !targetCoords) return null;
+        
+        // Calculate line opacity based on packet count (more packets = more opaque)
+        const maxPackets = Math.max(...connections.map(e => e.packet_count));
+        const opacity = Math.min(0.3 + (edge.packet_count / maxPackets) * 0.7, 1);
+        
+        // Calculate line width based on packet count
+        const weight = Math.min(1 + (edge.packet_count / maxPackets) * 4, 5);
+        
+        return (
+          <Polyline
+            key={`connection-${edge.source}-${edge.target}-${index}`}
+            positions={[sourceCoords, targetCoords]}
+            pathOptions={{
+              color: '#007bff',
+              weight: weight,
+              opacity: opacity,
+              dashArray: '5, 5', // Dashed line to distinguish from roads
+            }}
+          />
+        );
+      })}
 
       {/* Draw markers */}
       {nodesWithLocation.map((node) => {
