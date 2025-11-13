@@ -335,7 +335,7 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
                       <td className="potential-nodes-col">
                         {relay.potential_nodes && relay.potential_nodes.length > 0 ? (
                           <div className="potential-nodes-list">
-                            {relay.potential_nodes.slice(0, 3).map((node, nodeIdx) => (
+                            {relay.potential_nodes.map((node, nodeIdx) => (
                               <span key={node.node_id} className="potential-node-item">
                                 {nodeIdx > 0 && <span className="node-separator"> or </span>}
                                 {onNodeClick ? (
@@ -353,11 +353,6 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
                                 )}
                               </span>
                             ))}
-                            {relay.potential_nodes.length > 3 && (
-                              <span className="more-nodes" title={`${relay.potential_nodes.length - 3} more potential matches`}>
-                                {' '}+{relay.potential_nodes.length - 3} more
-                              </span>
-                            )}
                           </div>
                         ) : (
                           <span className="no-matches">No matching nodes</span>
