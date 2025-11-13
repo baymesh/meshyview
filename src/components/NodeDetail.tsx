@@ -3,8 +3,17 @@ import { MapContainer, TileLayer, Marker, Popup, LayersControl } from 'react-lea
 import L from 'leaflet';
 import { api } from '../api';
 import type { Node, NodeNeighborsResponse } from '../types';
-import { formatNodeId, parseNodeId, getPortNumName, formatLocalDateTime } from '../utils/portNames';
+import { formatNodeId, parseNodeId, getPortNumName, formatLocalDateTime, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
+import {
+  COORDINATE_SCALE_FACTOR,
+  POSITION_PORTNUM,
+  BROADCAST_NODE_ID,
+  MAP_NODE_DETAIL_ZOOM,
+  MAP_HEIGHT_COLLAPSED,
+  MAP_HEIGHT_EXPANDED,
+  DEFAULT_NEIGHBOR_DISPLAY_LIMIT
+} from '../utils/constants';
 
 const { BaseLayer } = LayersControl;
 
@@ -53,9 +62,6 @@ const HeardByIcon = L.divIcon({
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
-
-const COORDINATE_SCALE_FACTOR = 10000000;
-const POSITION_PORTNUM = 3;
 
 interface NodeDetailProps {
   nodeId: string;
@@ -510,13 +516,12 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
     : historicalPositions;
 
   const getNodeName = (nodeId: number): string => {
-    if (!nodeLookup) return formatNodeId(nodeId);
-    return nodeLookup.getNodeName(nodeId);
+    return getNodeDisplayName(nodeId, nodeLookup);
   };
 
   const isClickableNode = (nodeId: number): boolean => {
-    // Node is clickable if it's not the current node and it exists in our lookup
-    if (!nodeLookup || nodeId === node?.node_id) {
+    // Node is clickable if it's not 0, not broadcast, not the current node, and exists in lookup
+    if (!nodeLookup || nodeId === 0 || nodeId === BROADCAST_NODE_ID || nodeId === node?.node_id) {
       return false;
     }
     const nodeData = nodeLookup.getNode(nodeId);
@@ -694,8 +699,8 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
               <MapContainer
                 key={`${node.id}-${mapExpanded}`}
                 center={coordinates}
-                zoom={13}
-                style={{ height: mapExpanded ? '800px' : '300px', width: '100%' }}
+                zoom={MAP_NODE_DETAIL_ZOOM}
+                style={{ height: mapExpanded ? `${MAP_HEIGHT_EXPANDED}px` : `${MAP_HEIGHT_COLLAPSED}px`, width: '100%' }}
                 closePopupOnClick={false}
               >
                 <LayersControl position="topright">
@@ -868,7 +873,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                           {neighbors.heard_from
                             .filter(n => n.node_id !== node.node_id)
                             .sort((a, b) => b.packet_count - a.packet_count)
-                            .slice(0, 25)
+                            .slice(0, DEFAULT_NEIGHBOR_DISPLAY_LIMIT)
                             .map(neighbor => {
                               const neighborNode = nodeLookup?.getNode(neighbor.node_id);
                               return (
@@ -908,7 +913,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                           {neighbors.heard_by
                             .filter(n => n.node_id !== node.node_id)
                             .sort((a, b) => b.packet_count - a.packet_count)
-                            .slice(0, 25)
+                            .slice(0, DEFAULT_NEIGHBOR_DISPLAY_LIMIT)
                             .map(neighbor => {
                               const neighborNode = nodeLookup?.getNode(neighbor.node_id);
                               return (

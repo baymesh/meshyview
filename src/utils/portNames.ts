@@ -42,6 +42,12 @@ export function formatNodeId(nodeId: number): string {
   return nodeId.toString(16).padStart(8, '0');
 }
 
+// Get display name for a node (utility function to avoid duplication)
+export function getNodeDisplayName(nodeId: number, nodeLookup?: { getNodeName: (id: number) => string } | null): string {
+  if (!nodeLookup) return formatNodeId(nodeId);
+  return nodeLookup.getNodeName(nodeId);
+}
+
 // Parse node ID from various formats: !22ac3144, 22ac3144, or 581710148
 // Returns the numeric node ID or null if invalid
 export function parseNodeId(nodeIdStr: string): number | null {

@@ -2,15 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, LayersControl } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../api';
-import { formatNodeId, getPortNumName, formatLocalDateTime } from '../utils/portNames';
+import { formatNodeId, getPortNumName, formatLocalDateTime, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
 import { TracerouteVisualization } from './TracerouteVisualization';
 import { NeighborInfoVisualization } from './NeighborInfoVisualization';
 import { parseTraceroutePayload } from '../utils/tracerouteParser';
-
-const { BaseLayer } = LayersControl;
-
-const COORDINATE_SCALE_FACTOR = 10000000;
+import { 
+  COORDINATE_SCALE_FACTOR,
+  MAP_DEFAULT_ZOOM
+} from '../utils/constants';const { BaseLayer } = LayersControl;
 
 // Create custom icons for different hop counts
 const createHopIcon = (hopCount: number, isDirect: boolean) => {
@@ -310,8 +310,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   }, [packet, packetId]);
 
   const getNodeName = (nodeId: number): string => {
-    if (!nodeLookup) return formatNodeId(nodeId);
-    return nodeLookup.getNodeName(nodeId);
+    return getNodeDisplayName(nodeId, nodeLookup);
   };
 
   const getPayloadDisplay = (payload: string | { type: string; [key: string]: unknown }): string => {
@@ -592,7 +591,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                 <MapContainer
                   key={mapKey}
                   center={[centerLat, centerLng]}
-                  zoom={10}
+                  zoom={MAP_DEFAULT_ZOOM}
                   style={{ height: '100%', width: '100%' }}
                   closePopupOnClick={false}
                 >

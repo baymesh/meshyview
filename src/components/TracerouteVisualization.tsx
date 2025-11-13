@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { formatNodeId } from '../utils/portNames';
+import { formatNodeId, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
 
 interface TracerouteVisualizationProps {
@@ -36,8 +36,7 @@ export function TracerouteVisualization({
   }, [route, fromNodeId, toNodeId, isDone]);
 
   const getNodeName = (nodeId: number): string => {
-    if (!nodeLookup) return formatNodeId(nodeId);
-    return nodeLookup.getNodeName(nodeId);
+    return getNodeDisplayName(nodeId, nodeLookup);
   };
 
   // Calculate layout

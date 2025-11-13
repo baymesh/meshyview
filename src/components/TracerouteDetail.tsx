@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api';
-import { formatNodeId, formatLocalDateTime } from '../utils/portNames';
+import { formatNodeId, formatLocalDateTime, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
 
 interface TracerouteDetailProps {
@@ -76,8 +76,7 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
   }, [packetId]);
 
   const getNodeName = (nodeId: number): string => {
-    if (!nodeLookup) return formatNodeId(nodeId);
-    return nodeLookup.getNodeName(nodeId);
+    return getNodeDisplayName(nodeId, nodeLookup);
   };
 
   // Deduplicate routes - group by identical path
