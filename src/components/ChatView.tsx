@@ -3,6 +3,7 @@ import { api } from '../api';
 import type { ChatMessage } from '../types';
 import { formatCompactDateTime, formatNodeId } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
+import { LoadingState, ErrorState } from './ui';
 
 interface ChatViewProps {
   nodeLookup: NodeLookup | null;
@@ -251,8 +252,8 @@ export function ChatView({ nodeLookup, onNodeClick, onPacketClick, globalChannel
         </div>
       </div>
 
-      {loading && <div className="loading">Loading messages...</div>}
-      {error && <div className="error">Error: {error}</div>}
+      {loading && <LoadingState message="Loading messages..." />}
+      {error && <ErrorState message={`Error: ${error}`} />}
 
       {!loading && !error && (
         <div className="chat-messages-compact">
