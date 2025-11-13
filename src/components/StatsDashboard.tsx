@@ -65,7 +65,7 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
           : undefined;
         
         const baseParams = {
-          limit: 50,
+          limit: 25,
           since,
           channel: globalChannel,
         };
@@ -166,7 +166,7 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
         </div>
 
         <div className="stat-card stat-card-wide">
-          <h3>Top Gateways (50)</h3>
+          <h3>Top Gateways (25)</h3>
           {gatewaysLoading ? (
             <div className="stat-loading">Loading...</div>
           ) : topGateways.length > 0 ? (
@@ -211,7 +211,7 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
         </div>
 
         <div className="stat-card stat-card-wide">
-          <h3>Top Direct Gateways (50)</h3>
+          <h3>Top Direct Gateways (25)</h3>
           {gatewaysLoading ? (
             <div className="stat-loading">Loading...</div>
           ) : topDirectGateways.length > 0 ? (
