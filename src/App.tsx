@@ -602,30 +602,6 @@ function App() {
               connectionChannel={globalChannel}
               connectionHours={connectionHours}
             />
-            <div className="map-legend">
-              <h4>Node Types:</h4>
-              <div className="legend-items">
-                <div className="legend-item"><span className="legend-color" style={{backgroundColor: '#ff4444'}}></span> Router</div>
-                <div className="legend-item"><span className="legend-color" style={{backgroundColor: '#ff8844'}}></span> Router Client</div>
-                <div className="legend-item"><span className="legend-color" style={{backgroundColor: '#4444ff'}}></span> Client</div>
-                <div className="legend-item"><span className="legend-color" style={{backgroundColor: '#44ff44'}}></span> Client Base</div>
-                <div className="legend-item"><span className="legend-color" style={{backgroundColor: '#ff44ff'}}></span> Repeater</div>
-              </div>
-              {showNodeConnections && (
-                <div className="connection-legend">
-                  <h4>Connections:</h4>
-                  <div className="legend-items">
-                    <div className="legend-item">
-                      <span className="connection-line" style={{borderTop: '2px dashed #007bff', opacity: 0.8}}></span> 
-                      Packet traffic between nodes
-                    </div>
-                    <div className="legend-note">
-                      Line thickness and opacity indicate packet volume
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
