@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api';
 import { formatNodeId, formatLocalDateTime, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
+import { ErrorState, BackButton, InfoItem } from './ui';
 
 interface TracerouteDetailProps {
   packetId: number;
@@ -308,8 +309,8 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
   if (error || !data) {
     return (
       <div className="traceroute-detail-error">
-        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
-        <div className="error" role="alert">{error || 'Traceroute data not found'}</div>
+        <BackButton onClick={onBack} />
+        <ErrorState message={error || 'Traceroute data not found'} />
       </div>
     );
   }
@@ -320,46 +321,40 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
   return (
     <div className="traceroute-detail">
       <div className="traceroute-detail-header">
-        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
+        <BackButton onClick={onBack} />
         <h2>Traceroute Details</h2>
       </div>
 
       <div className="traceroute-detail-content">
         <div className="traceroute-summary">
           <h3>Summary</h3>
-          <div className="info-item">
-            <span className="info-label">Packet ID:</span>
-            <span className="info-value">{data.packet_id}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Unique Routes:</span>
-            <span className="info-value">{completedRoutes.length}</span>
-          </div>
+          <InfoItem label="Packet ID:" value={data.packet_id} />
+          <InfoItem label="Unique Routes:" value={completedRoutes.length} />
           {sourceNode && (
-            <div className="info-item">
-              <span className="info-label">Source:</span>
-              <span className="info-value">
+            <InfoItem 
+              label="Source:" 
+              value={
                 <button 
                   className="node-link"
                   onClick={() => onNodeClick(formatNodeId(sourceNode))}
                 >
                   {getNodeName(sourceNode)}
                 </button>
-              </span>
-            </div>
+              } 
+            />
           )}
           {destNode && (
-            <div className="info-item">
-              <span className="info-label">Destination:</span>
-              <span className="info-value">
+            <InfoItem 
+              label="Destination:" 
+              value={
                 <button 
                   className="node-link"
                   onClick={() => onNodeClick(formatNodeId(destNode))}
                 >
                   {getNodeName(destNode)}
                 </button>
-              </span>
-            </div>
+              } 
+            />
           )}
         </div>
 

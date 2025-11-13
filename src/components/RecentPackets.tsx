@@ -4,6 +4,7 @@ import type { Packet } from '../types';
 import { getPortNumName, formatLocalDateTime, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
 import { DEFAULT_PACKET_LIMIT, BROADCAST_NODE_ID } from '../utils/constants';
+import { LoadingState, ErrorState } from './ui';
 
 interface RecentPacketsProps {
   nodeLookup: NodeLookup | null;
@@ -135,7 +136,7 @@ export function RecentPackets({
   if (loading) {
     return (
       <div className="recent-packets">
-        <div className="loading" role="status" aria-live="polite">Loading packets...</div>
+        <LoadingState message="Loading packets..." />
       </div>
     );
   }
@@ -143,7 +144,7 @@ export function RecentPackets({
   if (error) {
     return (
       <div className="recent-packets">
-        <div className="error" role="alert">Error: {error}</div>
+        <ErrorState message={`Error: ${error}`} />
       </div>
     );
   }
