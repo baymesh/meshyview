@@ -588,14 +588,14 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
           const mapKey = `map-${packet.id}-${mapExpanded}`;
 
           return (
-            <div className="packet-map-card" ref={mapCardRef}>
+            <div className={`packet-map-card ${mapExpanded ? 'map-card-expanded' : ''}`} ref={mapCardRef}>
               <h3>Gateway Locations</h3>
               <div className="packet-map">
                 <MapContainer
                   key={mapKey}
                   center={[centerLat, centerLng]}
                   zoom={10}
-                  style={{ height: mapExpanded ? '800px' : '400px', width: '100%' }}
+                  style={{ height: '100%', width: '100%' }}
                   closePopupOnClick={false}
                 >
                   <LayersControl position="topright">

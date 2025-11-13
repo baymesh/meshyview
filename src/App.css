@@ -1132,6 +1132,12 @@ body {
   flex-direction: column;
 }
 
+.packet-map-card.map-card-expanded {
+  height: calc(100vh - 120px);
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
 .packet-map-card h3 {
   margin: 0 0 1rem 0;
   font-size: 1.1rem;
@@ -1170,6 +1176,15 @@ body {
 .packet-map {
   border-radius: 4px;
   overflow: hidden;
+  position: relative;
+  width: 100%;
+  min-height: 400px;
+  flex: 1;
+}
+
+.map-card-expanded .packet-map {
+  flex: 1;
+  min-height: 0;
 }
 
 /* Tabs container */
