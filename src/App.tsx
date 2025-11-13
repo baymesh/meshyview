@@ -617,6 +617,20 @@ function App() {
                 <div className="legend-item"><span className="legend-color" style={{backgroundColor: '#44ff44'}}></span> Client Base</div>
                 <div className="legend-item"><span className="legend-color" style={{backgroundColor: '#ff44ff'}}></span> Repeater</div>
               </div>
+              {showNodeConnections && (
+                <div className="connection-legend">
+                  <h4>Connections:</h4>
+                  <div className="legend-items">
+                    <div className="legend-item">
+                      <span className="connection-line" style={{borderTop: '2px dashed #007bff', opacity: 0.8}}></span> 
+                      Packet traffic between nodes
+                    </div>
+                    <div className="legend-note">
+                      Line thickness and opacity indicate packet volume
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
