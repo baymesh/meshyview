@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl, Polyline, useMapEvents } from 'react-leaflet';
 import { useEffect, useState } from 'react';
 import L from 'leaflet';
 import type { Node, NodeGraphEdge } from '../types';
@@ -118,6 +118,16 @@ function MapViewController({ nodes }: { nodes: Node[] }) {
   return null;
 }
 
+// Component to handle map clicks for clearing selection
+function MapClickHandler({ onMapClick }: { onMapClick: () => void }) {
+  useMapEvents({
+    click: () => {
+      onMapClick();
+    },
+  });
+  return null;
+}
+
 export function MeshMap({ 
   nodes, 
   onNodeClick, 
@@ -129,6 +139,7 @@ export function MeshMap({
   const [, forceUpdate] = useState({});
   const [connections, setConnections] = useState<NodeGraphEdge[]>([]);
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   
   // Force re-render every second to update glow effect
   useEffect(() => {
@@ -242,6 +253,7 @@ export function MeshMap({
           style={{ height: mapExpanded ? `${MAIN_MAP_HEIGHT_EXPANDED}px` : `${MAIN_MAP_HEIGHT_COLLAPSED}px`, width: '100%' }}
         >
             <MapViewController nodes={nodes} />
+            <MapClickHandler onMapClick={() => setSelectedNodeId(null)} />
             
             <LayersControl position="topright">
               <BaseLayer checked name="Street Map">
@@ -275,7 +287,17 @@ export function MeshMap({
               
               // Calculate line opacity based on packet count (more packets = more opaque)
               const maxPackets = Math.max(...connections.map(e => e.packet_count));
-              const opacity = Math.min(0.3 + (edge.packet_count / maxPackets) * 0.7, 1);
+              let opacity = Math.min(0.3 + (edge.packet_count / maxPackets) * 0.7, 1);
+              
+              // Adjust opacity based on selected node
+              if (selectedNodeId !== null) {
+                const involvesSelected = edge.source === selectedNodeId || edge.target === selectedNodeId;
+                if (involvesSelected) {
+                  opacity = Math.min(opacity * 1.5, 1); // Boost opacity for connections involving selected node
+                } else {
+                  opacity *= 0.2; // Reduce opacity for other connections
+                }
+              }
               
               // Calculate line width based on packet count
               const weight = Math.min(1 + (edge.packet_count / maxPackets) * 4, 5);
@@ -302,6 +324,11 @@ export function MeshMap({
                   key={node.id} 
                   position={[lat, lon]}
                   icon={createCustomIcon(node.role, node.node_id)}
+                  eventHandlers={{
+                    click: () => {
+                      setSelectedNodeId(node.node_id);
+                    },
+                  }}
                 >
                   <Popup>
                     <div style={{ minWidth: '200px' }}>

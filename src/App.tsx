@@ -101,10 +101,6 @@ function App() {
     const saved = localStorage.getItem('showNodeConnections');
     return saved ? saved === 'true' : false; // Default to false
   })
-  const [connectionHours, setConnectionHours] = useState<number>(() => {
-    const saved = localStorage.getItem('connectionHours');
-    return saved ? parseFloat(saved) : 24; // Default to 24 hours
-  })
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState(getViewFromUrl());
   const [recentlyUpdatedNodes, setRecentlyUpdatedNodes] = useState<Map<number, number>>(new Map()); // node_id -> timestamp
@@ -558,7 +554,7 @@ function App() {
                 activeTab="map"
               />
               <div className="connection-controls">
-                <label>
+                <label className="connection-toggle">
                   <input
                     type="checkbox"
                     checked={showNodeConnections}
@@ -568,30 +564,9 @@ function App() {
                       localStorage.setItem('showNodeConnections', String(newValue));
                     }}
                   />
-                  Show Node Connections
+                  <span className="toggle-slider"></span>
+                  Show Connections
                 </label>
-                {showNodeConnections && (
-                  <div className="connection-settings">
-                    <label>
-                      Time Range (hours):
-                      <select
-                        value={connectionHours}
-                        onChange={(e) => {
-                          const newValue = parseFloat(e.target.value);
-                          setConnectionHours(newValue);
-                          localStorage.setItem('connectionHours', String(newValue));
-                        }}
-                      >
-                        <option value="1">1 hour</option>
-                        <option value="6">6 hours</option>
-                        <option value="12">12 hours</option>
-                        <option value="24">24 hours</option>
-                        <option value="48">48 hours</option>
-                        <option value="168">1 week</option>
-                      </select>
-                    </label>
-                  </div>
-                )}
               </div>
             </div>
             <MeshMap 
@@ -600,7 +575,7 @@ function App() {
               recentlyUpdatedNodes={recentlyUpdatedNodes}
               showConnections={showNodeConnections}
               connectionChannel={globalChannel}
-              connectionHours={connectionHours}
+              connectionHours={24}
             />
           </div>
         )}
