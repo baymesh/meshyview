@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import L from 'leaflet';
 import type { Node, NodeGraphEdge } from '../types';
 import { api } from '../api';
+import { MAIN_MAP_HEIGHT_COLLAPSED, MAIN_MAP_HEIGHT_EXPANDED } from '../utils/constants';
 import 'leaflet/dist/leaflet.css';
 
 const { BaseLayer } = LayersControl;
@@ -127,6 +128,7 @@ export function MeshMap({
 }: MeshMapProps) {
   const [, forceUpdate] = useState({});
   const [connections, setConnections] = useState<NodeGraphEdge[]>([]);
+  const [mapExpanded, setMapExpanded] = useState(false);
   
   // Force re-render every second to update glow effect
   useEffect(() => {
@@ -231,109 +233,143 @@ export function MeshMap({
   };
 
   return (
-    <MapContainer
-      center={DEFAULT_CENTER}
-      zoom={9}
-      style={{ height: '100%', width: '100%' }}
-    >
-      <MapViewController nodes={nodes} />
-      
-      <LayersControl position="topright">
-        <BaseLayer checked name="Street Map">
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-        </BaseLayer>
-        
-        <BaseLayer name="Satellite">
-          <TileLayer
-            attribution='Imagery &copy; <a href="https://www.esri.com/">Esri</a>'
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-          />
-        </BaseLayer>
-        
-        <BaseLayer name="Terrain">
-          <TileLayer
-            attribution='Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
-            url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
-          />
-        </BaseLayer>
-      </LayersControl>
+    <div className="mesh-map-container">
+      <div className="mesh-map-wrapper">
+        <MapContainer
+          key={`${nodes.length}-${mapExpanded}`}
+          center={DEFAULT_CENTER}
+          zoom={9}
+          style={{ height: mapExpanded ? `${MAIN_MAP_HEIGHT_EXPANDED}px` : `${MAIN_MAP_HEIGHT_COLLAPSED}px`, width: '100%' }}
+        >
+            <MapViewController nodes={nodes} />
+            
+            <LayersControl position="topright">
+              <BaseLayer checked name="Street Map">
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+              </BaseLayer>
+              
+              <BaseLayer name="Satellite">
+                <TileLayer
+                  attribution='Imagery &copy; <a href="https://www.esri.com/">Esri</a>'
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                />
+              </BaseLayer>
+              
+              <BaseLayer name="Terrain">
+                <TileLayer
+                  attribution='Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+                  url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+                />
+              </BaseLayer>
+            </LayersControl>
 
-      {/* Draw connection lines between nodes */}
-      {showConnections && connections.map((edge, index) => {
-        const sourceCoords = nodeCoordinates.get(edge.source);
-        const targetCoords = nodeCoordinates.get(edge.target);
-        
-        if (!sourceCoords || !targetCoords) return null;
-        
-        // Calculate line opacity based on packet count (more packets = more opaque)
-        const maxPackets = Math.max(...connections.map(e => e.packet_count));
-        const opacity = Math.min(0.3 + (edge.packet_count / maxPackets) * 0.7, 1);
-        
-        // Calculate line width based on packet count
-        const weight = Math.min(1 + (edge.packet_count / maxPackets) * 4, 5);
-        
-        return (
-          <Polyline
-            key={`connection-${edge.source}-${edge.target}-${index}`}
-            positions={[sourceCoords, targetCoords]}
-            pathOptions={{
-              color: '#007bff',
-              weight: weight,
-              opacity: opacity,
-              dashArray: '5, 5', // Dashed line to distinguish from roads
-            }}
-          />
-        );
-      })}
+            {/* Draw connection lines between nodes */}
+            {showConnections && connections.map((edge, index) => {
+              const sourceCoords = nodeCoordinates.get(edge.source);
+              const targetCoords = nodeCoordinates.get(edge.target);
+              
+              if (!sourceCoords || !targetCoords) return null;
+              
+              // Calculate line opacity based on packet count (more packets = more opaque)
+              const maxPackets = Math.max(...connections.map(e => e.packet_count));
+              const opacity = Math.min(0.3 + (edge.packet_count / maxPackets) * 0.7, 1);
+              
+              // Calculate line width based on packet count
+              const weight = Math.min(1 + (edge.packet_count / maxPackets) * 4, 5);
+              
+              return (
+                <Polyline
+                  key={`connection-${edge.source}-${edge.target}-${index}`}
+                  positions={[sourceCoords, targetCoords]}
+                  pathOptions={{
+                    color: '#007bff',
+                    weight: weight,
+                    opacity: opacity,
+                    dashArray: '5, 5', // Dashed line to distinguish from roads
+                  }}
+                />
+              );
+            })}
 
-      {/* Draw markers */}
-      {nodesWithLocation.map((node) => {
-        const [lat, lon] = convertCoordinates(node.last_lat!, node.last_long!);
-        return (
-          <Marker 
-            key={node.id} 
-            position={[lat, lon]}
-            icon={createCustomIcon(node.role, node.node_id)}
-          >
-            <Popup>
-              <div style={{ minWidth: '200px' }}>
-                <h3 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>{node.long_name}</h3>
-                <div style={{ fontSize: '13px' }}>
-                  <p style={{ margin: '4px 0' }}><strong>ID:</strong> {node.id}</p>
-                  <p style={{ margin: '4px 0' }}><strong>Short Name:</strong> {node.short_name}</p>
-                  <p style={{ margin: '4px 0' }}><strong>Role:</strong> {node.role}</p>
-                  <p style={{ margin: '4px 0' }}><strong>Hardware:</strong> {node.hw_model}</p>
-                  {node.firmware && (
-                    <p style={{ margin: '4px 0' }}><strong>Firmware:</strong> {node.firmware}</p>
-                  )}
-                  <p style={{ margin: '4px 0' }}><strong>Channel:</strong> {node.channel}</p>
-                  <p style={{ margin: '4px 0' }}><strong>Last Update:</strong> {new Date(node.last_update).toLocaleString()}</p>
-                </div>
-                {onNodeClick && (
-                  <button
-                    onClick={() => onNodeClick(node.id)}
-                    style={{
-                      marginTop: '8px',
-                      padding: '6px 12px',
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      width: '100%'
-                    }}
-                  >
-                    View Details →
-                  </button>
-                )}
-              </div>
-            </Popup>
-          </Marker>
-        );
-      })}
-    </MapContainer>
+            {/* Draw markers */}
+            {nodesWithLocation.map((node) => {
+              const [lat, lon] = convertCoordinates(node.last_lat!, node.last_long!);
+              return (
+                <Marker 
+                  key={node.id} 
+                  position={[lat, lon]}
+                  icon={createCustomIcon(node.role, node.node_id)}
+                >
+                  <Popup>
+                    <div style={{ minWidth: '200px' }}>
+                      <h3 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>{node.long_name}</h3>
+                      <div style={{ fontSize: '13px' }}>
+                        <p style={{ margin: '4px 0' }}><strong>ID:</strong> {node.id}</p>
+                        <p style={{ margin: '4px 0' }}><strong>Short Name:</strong> {node.short_name}</p>
+                        <p style={{ margin: '4px 0' }}><strong>Role:</strong> {node.role}</p>
+                        <p style={{ margin: '4px 0' }}><strong>Hardware:</strong> {node.hw_model}</p>
+                        {node.firmware && (
+                          <p style={{ margin: '4px 0' }}><strong>Firmware:</strong> {node.firmware}</p>
+                        )}
+                        <p style={{ margin: '4px 0' }}><strong>Channel:</strong> {node.channel}</p>
+                        <p style={{ margin: '4px 0' }}><strong>Last Update:</strong> {new Date(node.last_update).toLocaleString()}</p>
+                      </div>
+                      {onNodeClick && (
+                        <button
+                          onClick={() => onNodeClick(node.id)}
+                          style={{
+                            marginTop: '8px',
+                            padding: '6px 12px',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            width: '100%'
+                          }}
+                        >
+                          View Details →
+                        </button>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
+          </MapContainer>
+      </div>
+      <button 
+        className="map-expand-button"
+        onClick={() => {
+          const willExpand = !mapExpanded;
+          setMapExpanded(willExpand);
+          if (willExpand) {
+            // Scroll to the top of the map when expanding
+            setTimeout(() => {
+              const mapElement = document.querySelector('.mesh-map-container');
+              if (mapElement) {
+                mapElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            }, 100);
+          }
+        }}
+        title={mapExpanded ? "Collapse map" : "Expand map"}
+      >
+        {mapExpanded ? (
+          <>
+            <span>Collapse</span>
+            <span style={{ marginLeft: '0.5rem' }}>▲</span>
+          </>
+        ) : (
+          <>
+            <span>Expand</span>
+            <span style={{ marginLeft: '0.5rem' }}>▼</span>
+          </>
+        )}
+      </button>
+    </div>
   );
 }

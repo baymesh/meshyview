@@ -594,20 +594,14 @@ function App() {
                 )}
               </div>
             </div>
-            <div className="map-container">
-              {loading ? (
-                <div className="loading">Loading nodes...</div>
-              ) : (
-                <MeshMap 
-                  nodes={nodes} 
-                  onNodeClick={handleNodeClick} 
-                  recentlyUpdatedNodes={recentlyUpdatedNodes}
-                  showConnections={showNodeConnections}
-                  connectionChannel={globalChannel}
-                  connectionHours={connectionHours}
-                />
-              )}
-            </div>
+            <MeshMap 
+              nodes={nodes} 
+              onNodeClick={handleNodeClick} 
+              recentlyUpdatedNodes={recentlyUpdatedNodes}
+              showConnections={showNodeConnections}
+              connectionChannel={globalChannel}
+              connectionHours={connectionHours}
+            />
             <div className="map-legend">
               <h4>Node Types:</h4>
               <div className="legend-items">
