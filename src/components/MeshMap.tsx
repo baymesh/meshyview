@@ -230,13 +230,26 @@ export function MeshMap({
     const color = getRoleColor(role);
     const glowOpacity = getGlowOpacity(nodeId);
     
+    // Check if this node should be dimmed due to selection
+    let nodeOpacity = 1;
+    if (selectedNodeId !== null && selectedNodeId !== nodeId) {
+      // Check if this node is connected to the selected node
+      const isConnected = connections.some(edge => 
+        (edge.source === selectedNodeId && edge.target === nodeId) ||
+        (edge.source === nodeId && edge.target === selectedNodeId)
+      );
+      if (!isConnected) {
+        nodeOpacity = 0.5;
+      }
+    }
+    
     const glowStyle = glowOpacity > 0 
       ? `box-shadow: 0 0 20px rgba(255, 255, 0, ${glowOpacity}), 0 0 40px rgba(255, 255, 0, ${glowOpacity * 0.5}), 0 2px 4px rgba(0,0,0,0.3);`
       : 'box-shadow: 0 2px 4px rgba(0,0,0,0.3);';
     
     return L.divIcon({
       className: 'custom-marker',
-      html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; ${glowStyle}"></div>`,
+      html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; ${glowStyle} opacity: ${nodeOpacity};"></div>`,
       iconSize: [20, 20],
       iconAnchor: [10, 10],
       popupAnchor: [0, -10],
@@ -295,7 +308,7 @@ export function MeshMap({
                 if (involvesSelected) {
                   opacity = Math.min(opacity * 1.5, 1); // Boost opacity for connections involving selected node
                 } else {
-                  opacity *= 0.0; // Reduce opacity for other connections
+                  opacity *= 0.2; // Reduce opacity for other connections
                 }
               }
               
