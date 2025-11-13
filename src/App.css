@@ -322,6 +322,10 @@ body {
   grid-column: span 2;
 }
 
+.stat-card-four-wide {
+  grid-column: span 4;
+}
+
 .gateways-table-container {
   overflow-x: auto;
 }
@@ -386,6 +390,91 @@ body {
   font-weight: 600;
   color: var(--link-color);
   font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* Relay nodes table styling */
+.relays-table-container {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.relays-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.relays-list-table thead {
+  background: var(--bg-secondary);
+}
+
+.relays-list-table th {
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border-color);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.relays-list-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.relays-list-table tbody tr:hover {
+  background: var(--bg-secondary);
+}
+
+.byte-col {
+  width: 100px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.byte-col code {
+  background: var(--bg-secondary);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.9rem;
+}
+
+.potential-nodes-col {
+  width: auto;
+  min-width: 300px;
+}
+
+.potential-nodes-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.potential-node-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.node-separator {
+  color: var(--text-secondary);
+  font-style: italic;
+  margin: 0 0.25rem;
+}
+
+.more-nodes {
+  color: var(--text-secondary);
+  font-size: 0.9em;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.no-matches {
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 .gateways-grid {

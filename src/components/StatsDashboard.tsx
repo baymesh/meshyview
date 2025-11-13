@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import type { Stats, TopGateway } from '../types';
+import type { Stats, TopGateway, Node } from '../types';
 import { getPortNumName } from '../utils/portNames';
 import { api } from '../api';
 import { LoadingState, ErrorState } from './ui';
+import type { NodeLookup } from '../utils/nodeLookup';
 
 interface StatsDashboardProps {
   stats: Stats | null;
@@ -10,13 +11,21 @@ interface StatsDashboardProps {
   globalChannel?: string;
   globalDaysActive?: number;
   onNodeClick?: (nodeId: string) => void;
+  nodeLookup?: NodeLookup;
 }
 
-export function StatsDashboard({ stats: initialStats, loading: initialLoading, globalChannel, globalDaysActive, onNodeClick }: StatsDashboardProps) {
+interface ProcessedRelay {
+  relay_byte: number;
+  packet_count: number;
+  potential_nodes: Node[];
+}
+
+export function StatsDashboard({ stats: initialStats, loading: initialLoading, globalChannel, globalDaysActive, onNodeClick, nodeLookup }: StatsDashboardProps) {
   const [stats, setStats] = useState<Stats | null>(initialStats);
   const [loading, setLoading] = useState(false); // Don't show loading on initial render
   const [topGateways, setTopGateways] = useState<TopGateway[]>([]);
   const [topDirectGateways, setTopDirectGateways] = useState<TopGateway[]>([]);
+  const [topRelays, setTopRelays] = useState<ProcessedRelay[]>([]);
   const [gatewaysLoading, setGatewaysLoading] = useState(false);
 
   useEffect(() => {
@@ -70,25 +79,68 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
           channel: globalChannel,
         };
         
-        // Fetch both all packets and direct-only gateways
-        const [allPacketsData, directOnlyData] = await Promise.all([
+        // Fetch all packets, direct-only gateways, and top relays
+        const [allPacketsData, directOnlyData, relaysData] = await Promise.all([
           api.getTopGateways(baseParams),
-          api.getTopGateways({ ...baseParams, direct_only: true })
+          api.getTopGateways({ ...baseParams, direct_only: true }),
+          api.getTopRelays({ ...baseParams, limit: 10 })
         ]);
         
         setTopGateways(allPacketsData.gateways);
         setTopDirectGateways(directOnlyData.gateways);
+        console.log('Fetched relay nodes data:', relaysData);
+
+        console.log('Node lookup available:', !!nodeLookup);
+
+        // Process relay nodes - group by last byte and find matching nodes
+        if (relaysData?.relay_nodes && nodeLookup) {
+          const relayMap = new Map<number, { packet_count: number; node_ids: number[] }>();
+          
+          // Group relay nodes by their last byte
+          relaysData.relay_nodes.forEach((relayNode) => {
+            const lastByte = relayNode.node_id & 0xFF;
+            if (!relayMap.has(lastByte)) {
+              relayMap.set(lastByte, { packet_count: 0, node_ids: [] });
+            }
+            const entry = relayMap.get(lastByte)!;
+            entry.packet_count += relayNode.packet_count;
+            entry.node_ids.push(relayNode.node_id);
+          });
+          
+          console.log('Processed relay map:', relayMap);
+          const processedRelays: ProcessedRelay[] = Array.from(relayMap.entries())
+            .map(([relay_byte, { packet_count }]) => {
+              // Get all nodes on the same channel that match this last byte
+              const allNodes = nodeLookup.getAllNodes();
+              const matchingNodes = allNodes.filter(node => 
+                globalChannel ? node.channel === globalChannel && (node.node_id & 0xFF) === relay_byte : (node.node_id & 0xFF) === relay_byte
+              );
+              
+              return {
+                relay_byte,
+                packet_count,
+                potential_nodes: matchingNodes
+              };
+            })
+            .sort((a, b) => b.packet_count - a.packet_count)
+            .slice(0, 10);
+          
+          setTopRelays(processedRelays);
+        } else {
+          setTopRelays([]);
+        }
       } catch (err) {
-        console.error('Error fetching top gateways:', err);
+        console.error('Error fetching top gateways and relays:', err);
         setTopGateways([]);
         setTopDirectGateways([]);
+        setTopRelays([]);
       } finally {
         setGatewaysLoading(false);
       }
     };
 
     fetchTopGateways();
-  }, [globalChannel, globalDaysActive]);
+  }, [globalChannel, globalDaysActive, nodeLookup]);
 
   // Show initial loading state from parent
   if (initialLoading && !stats) {
@@ -251,6 +303,75 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
           ) : (
             <div className="stat-item">
               <span className="stat-label">No data available</span>
+            </div>
+          )}
+        </div>
+
+        <div className="stat-card stat-card-four-wide">
+          <h3>Top Relay Nodes (10)</h3>
+          <p style={{ fontSize: '0.85em', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+            Relay nodes forward packets between devices. Each entry shows potential nodes matching the relay byte.
+          </p>
+          {gatewaysLoading ? (
+            <div className="stat-loading">Loading...</div>
+          ) : topRelays.length > 0 ? (
+            <div className="relays-table-container">
+              <table className="relays-list-table">
+                <thead>
+                  <tr>
+                    <th className="rank-col">#</th>
+                    <th className="byte-col">Relay Byte</th>
+                    <th className="potential-nodes-col">Potential Relay Nodes</th>
+                    <th className="count-col">Packets</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topRelays.map((relay, index) => (
+                    <tr key={relay.relay_byte}>
+                      <td className="rank-col">{index + 1}</td>
+                      <td className="byte-col">
+                        <code>0x{relay.relay_byte.toString(16).padStart(2, '0').toUpperCase()}</code>
+                      </td>
+                      <td className="potential-nodes-col">
+                        {relay.potential_nodes && relay.potential_nodes.length > 0 ? (
+                          <div className="potential-nodes-list">
+                            {relay.potential_nodes.slice(0, 3).map((node, nodeIdx) => (
+                              <span key={node.node_id} className="potential-node-item">
+                                {nodeIdx > 0 && <span className="node-separator"> or </span>}
+                                {onNodeClick ? (
+                                  <button 
+                                    className="node-link"
+                                    onClick={() => onNodeClick(node.id)}
+                                    title={`${node.long_name} (${node.hw_model})`}
+                                  >
+                                    {node.long_name || node.short_name}
+                                  </button>
+                                ) : (
+                                  <span title={`${node.long_name} (${node.hw_model})`}>
+                                    {node.long_name || node.short_name}
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                            {relay.potential_nodes.length > 3 && (
+                              <span className="more-nodes" title={`${relay.potential_nodes.length - 3} more potential matches`}>
+                                {' '}+{relay.potential_nodes.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="no-matches">No matching nodes</span>
+                        )}
+                      </td>
+                      <td className="count-col">{relay.packet_count.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="stat-item">
+              <span className="stat-label">No relay data available</span>
             </div>
           )}
         </div>

@@ -113,3 +113,12 @@ export interface NodeGraphResponse {
     generated_at: string;
   };
 }
+
+export interface TopRelayNode {
+  node_id: number;
+  packet_count: number;
+}
+
+export interface TopRelaysResponse {
+  relay_nodes: TopRelayNode[];
+}

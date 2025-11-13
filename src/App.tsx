@@ -587,6 +587,7 @@ function App() {
             globalChannel={globalChannel} 
             globalDaysActive={globalDaysActive}
             onNodeClick={handleNodeClick}
+            nodeLookup={nodeLookup || undefined}
           />
         )}
 

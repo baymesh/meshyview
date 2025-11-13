@@ -1,4 +1,4 @@
-import type { NodesResponse, Stats, EdgesResponse, ChatResponse, TopGatewaysResponse, NodeNeighborsResponse, NodeGraphResponse } from './types';
+import type { NodesResponse, Stats, EdgesResponse, ChatResponse, TopGatewaysResponse, NodeNeighborsResponse, NodeGraphResponse, TopRelaysResponse } from './types';
 
 const API_BASE_URL = 'https://meshql.bayme.sh';
 
@@ -229,5 +229,15 @@ export const api = {
     const url = buildApiUrl('/api/nodegraph', params);
     const response = await safeFetch(url, 'fetch node graph');
     return handleApiResponse<NodeGraphResponse>(response, 'fetch node graph');
+  },
+
+  async getTopRelays(params?: {
+    limit?: number;
+    since?: string;
+    channel?: string;
+  }): Promise<TopRelaysResponse> {
+    const url = buildApiUrl('/api/relaynodes/top', params);
+    const response = await safeFetch(url, 'fetch top relays');
+    return handleApiResponse<TopRelaysResponse>(response, 'fetch top relays');
   },
 };
