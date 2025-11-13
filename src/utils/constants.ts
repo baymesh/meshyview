@@ -3,6 +3,37 @@
 // Meshtastic coordinate scale factor (coords are stored as integers * 10^7)
 export const COORDINATE_SCALE_FACTOR = 10000000;
 
+// Port number to name mapping based on Meshtastic protocol
+// Reference: https://buf.build/meshtastic/protobufs/docs/main:meshtastic#meshtastic.PortNum
+export const PORT_NUM_NAMES: Record<string, string> = {
+  '0': 'UNKNOWN_APP',
+  '1': 'TEXT_MESSAGE_APP',
+  '2': 'REMOTE_HARDWARE_APP',
+  '3': 'POSITION_APP',
+  '4': 'NODEINFO_APP',
+  '5': 'ROUTING_APP',
+  '6': 'ADMIN_APP',
+  '7': 'TEXT_MESSAGE_COMPRESSED_APP',
+  '8': 'WAYPOINT_APP',
+  '9': 'AUDIO_APP',
+  '10': 'DETECTION_SENSOR_APP',
+  '32': 'REPLY_APP',
+  '33': 'IP_TUNNEL_APP',
+  '34': 'PAXCOUNTER_APP',
+  '64': 'SERIAL_APP',
+  '65': 'STORE_FORWARD_APP',
+  '66': 'RANGE_TEST_APP',
+  '67': 'TELEMETRY_APP',
+  '68': 'ZPS_APP',
+  '69': 'SIMULATOR_APP',
+  '70': 'TRACEROUTE_APP',
+  '71': 'NEIGHBORINFO_APP',
+  '72': 'ATAK_PLUGIN',
+  '73': 'MAP_REPORT_APP',
+  '256': 'PRIVATE_APP',
+  '257': 'ATAK_FORWARDER',
+};
+
 // Port number for position packets
 export const POSITION_PORTNUM = 3;
 
