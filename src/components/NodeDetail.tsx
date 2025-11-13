@@ -3,8 +3,18 @@ import { MapContainer, TileLayer, Marker, Popup, LayersControl } from 'react-lea
 import L from 'leaflet';
 import { api } from '../api';
 import type { Node, NodeNeighborsResponse } from '../types';
-import { formatNodeId, parseNodeId, getPortNumName, formatLocalDateTime } from '../utils/portNames';
+import { formatNodeId, parseNodeId, getPortNumName, formatLocalDateTime, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
+import {
+  COORDINATE_SCALE_FACTOR,
+  POSITION_PORTNUM,
+  BROADCAST_NODE_ID,
+  MAP_NODE_DETAIL_ZOOM,
+  MAP_HEIGHT_COLLAPSED,
+  MAP_HEIGHT_EXPANDED,
+  DEFAULT_NEIGHBOR_DISPLAY_LIMIT
+} from '../utils/constants';
+import { LoadingState, ErrorState, BackButton, InfoItem } from './ui';
 
 const { BaseLayer } = LayersControl;
 
@@ -53,9 +63,6 @@ const HeardByIcon = L.divIcon({
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
-
-const COORDINATE_SCALE_FACTOR = 10000000;
-const POSITION_PORTNUM = 3;
 
 interface NodeDetailProps {
   nodeId: string;
@@ -469,14 +476,14 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   }, [node?.id, node?.node_id, activeTab]);
 
   if (loading) {
-    return <div className="loading">Loading node details...</div>;
+    return <LoadingState message="Loading node details..." />;
   }
 
   if (error) {
     return (
       <div className="node-detail-error">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
-        <div className="error">{error}</div>
+        <BackButton onClick={onBack} />
+        <ErrorState message={error} />
       </div>
     );
   }
@@ -484,8 +491,8 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   if (!node) {
     return (
       <div className="node-detail-error">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
-        <div className="error">Node not found</div>
+        <BackButton onClick={onBack} />
+        <ErrorState message="Node not found" />
       </div>
     );
   }
@@ -510,13 +517,12 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
     : historicalPositions;
 
   const getNodeName = (nodeId: number): string => {
-    if (!nodeLookup) return formatNodeId(nodeId);
-    return nodeLookup.getNodeName(nodeId);
+    return getNodeDisplayName(nodeId, nodeLookup);
   };
 
   const isClickableNode = (nodeId: number): boolean => {
-    // Node is clickable if it's not the current node and it exists in our lookup
-    if (!nodeLookup || nodeId === node?.node_id) {
+    // Node is clickable if it's not 0, not broadcast, not the current node, and exists in lookup
+    if (!nodeLookup || nodeId === 0 || nodeId === BROADCAST_NODE_ID || nodeId === node?.node_id) {
       return false;
     }
     const nodeData = nodeLookup.getNode(nodeId);
@@ -638,53 +644,23 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   return (
     <div className="node-detail">
       <div className="node-detail-header">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
+        <BackButton onClick={onBack} />
         <h2>Node Details: {node.long_name}</h2>
       </div>
 
       <div className="node-info-cards">
         <div className="node-info-card">
           <h3>Basic Information</h3>
-          <div className="info-item">
-            <span className="info-label">Name:</span>
-            <span className="info-value">{node.long_name}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Short Name:</span>
-            <span className="info-value">{node.short_name}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">ID:</span>
-            <span className="info-value">{node.id}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Node ID:</span>
-            <span className="info-value">{node.node_id}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Relay ID:</span>
-            <span className="info-value">{node.node_id & 255}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Role:</span>
-            <span className="info-value">{node.role}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Hardware:</span>
-            <span className="info-value">{node.hw_model}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Firmware:</span>
-            <span className="info-value">{node.firmware || 'N/A'}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Channel:</span>
-            <span className="info-value">{node.channel}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Last Update:</span>
-            <span className="info-value">{formatLocalDateTime(node.last_update)}</span>
-          </div>
+          <InfoItem label="Name:" value={node.long_name} />
+          <InfoItem label="Short Name:" value={node.short_name} />
+          <InfoItem label="ID:" value={node.id} />
+          <InfoItem label="Node ID:" value={node.node_id} />
+          <InfoItem label="Relay ID:" value={node.node_id & 255} />
+          <InfoItem label="Role:" value={node.role} />
+          <InfoItem label="Hardware:" value={node.hw_model} />
+          <InfoItem label="Firmware:" value={node.firmware || 'N/A'} />
+          <InfoItem label="Channel:" value={node.channel} />
+          <InfoItem label="Last Update:" value={formatLocalDateTime(node.last_update)} />
         </div>
 
         {coordinates && (
@@ -694,8 +670,8 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
               <MapContainer
                 key={`${node.id}-${mapExpanded}`}
                 center={coordinates}
-                zoom={13}
-                style={{ height: mapExpanded ? '800px' : '300px', width: '100%' }}
+                zoom={MAP_NODE_DETAIL_ZOOM}
+                style={{ height: mapExpanded ? `${MAP_HEIGHT_EXPANDED}px` : `${MAP_HEIGHT_COLLAPSED}px`, width: '100%' }}
                 closePopupOnClick={false}
               >
                 <LayersControl position="topright">
@@ -868,7 +844,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                           {neighbors.heard_from
                             .filter(n => n.node_id !== node.node_id)
                             .sort((a, b) => b.packet_count - a.packet_count)
-                            .slice(0, 25)
+                            .slice(0, DEFAULT_NEIGHBOR_DISPLAY_LIMIT)
                             .map(neighbor => {
                               const neighborNode = nodeLookup?.getNode(neighbor.node_id);
                               return (
@@ -908,7 +884,7 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
                           {neighbors.heard_by
                             .filter(n => n.node_id !== node.node_id)
                             .sort((a, b) => b.packet_count - a.packet_count)
-                            .slice(0, 25)
+                            .slice(0, DEFAULT_NEIGHBOR_DISPLAY_LIMIT)
                             .map(neighbor => {
                               const neighborNode = nodeLookup?.getNode(neighbor.node_id);
                               return (

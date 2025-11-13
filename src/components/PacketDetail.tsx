@@ -2,15 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, LayersControl } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../api';
-import { formatNodeId, getPortNumName, formatLocalDateTime } from '../utils/portNames';
+import { formatNodeId, getPortNumName, formatLocalDateTime, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
 import { TracerouteVisualization } from './TracerouteVisualization';
 import { NeighborInfoVisualization } from './NeighborInfoVisualization';
 import { parseTraceroutePayload } from '../utils/tracerouteParser';
-
-const { BaseLayer } = LayersControl;
-
-const COORDINATE_SCALE_FACTOR = 10000000;
+import { LoadingState, ErrorState, BackButton, InfoItem } from './ui';
+import { 
+  COORDINATE_SCALE_FACTOR,
+  MAP_DEFAULT_ZOOM
+} from '../utils/constants';const { BaseLayer } = LayersControl;
 
 // Create custom icons for different hop counts
 const createHopIcon = (hopCount: number, isDirect: boolean) => {
@@ -109,6 +110,15 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
     hasShownNotification.current = false;
   }, [packetId]);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const fetchPacketDetail = async () => {
       try {
@@ -187,23 +197,15 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
     
     try {
       const neighbors = await api.getNodeNeighbors(gwNodeId);
-      const gwName = gw.node_name || getNodeName(gwNodeId);
-      
-      console.log(`[Relay Debug] Gateway: ${gwName} (${gwNodeId}, relay_node: ${gwRelayNode})`);
-      console.log(`  heard_from:`, neighbors.heard_from.map(n => `${n.node_id} (last byte: ${n.node_id & 255}, packets: ${n.packet_count})`));
-      console.log(`  heard_by:`, neighbors.heard_by.map(n => `${n.node_id} (last byte: ${n.node_id & 255}, packets: ${n.packet_count})`));
       
       // Prefer heard_from (nodes this gateway heard from), fallback to heard_by
       let matchingNeighbors = neighbors.heard_from
         .filter(n => (n.node_id & 255) === gwRelayNode);
       
-      console.log(`  heard_from matches:`, matchingNeighbors.map(n => `${n.node_id} (packets: ${n.packet_count})`));
-      
       if (matchingNeighbors.length === 0) {
         // Fallback to heard_by if nothing in heard_from
         matchingNeighbors = neighbors.heard_by
           .filter(n => (n.node_id & 255) === gwRelayNode);
-        console.log(`  heard_by matches (fallback):`, matchingNeighbors.map(n => `${n.node_id} (packets: ${n.packet_count})`));
       }
       
       if (matchingNeighbors.length > 0) {
@@ -211,15 +213,11 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
         matchingNeighbors.sort((a, b) => b.packet_count - a.packet_count);
         const bestMatch = matchingNeighbors[0].node_id;
         
-        console.log(`  ✓ Selected best match: ${bestMatch} with ${matchingNeighbors[0].packet_count} packets`);
-        
         setRelayMatches(prev => {
           const updated = new Map(prev);
           updated.set(gwNodeId, [bestMatch]);
           return updated;
         });
-      } else {
-        console.log(`  ✗ No matches found!`);
       }
     } catch (err) {
       console.error(`Error fetching neighbors for node ${gwNodeId}:`, err);
@@ -313,8 +311,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   }, [packet, packetId]);
 
   const getNodeName = (nodeId: number): string => {
-    if (!nodeLookup) return formatNodeId(nodeId);
-    return nodeLookup.getNodeName(nodeId);
+    return getNodeDisplayName(nodeId, nodeLookup);
   };
 
   const getPayloadDisplay = (payload: string | { type: string; [key: string]: unknown }): string => {
@@ -436,14 +433,14 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   };
 
   if (loading) {
-    return <div className="loading">Loading packet details...</div>;
+    return <LoadingState message="Loading packet details..." />;
   }
 
   if (error || !packet) {
     return (
       <div className="packet-detail-error">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
-        <div className="error">{error || 'Packet not found'}</div>
+        <BackButton onClick={onBack} />
+        <ErrorState message={error || 'Packet not found'} />
       </div>
     );
   }
@@ -451,7 +448,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   return (
     <div className="packet-detail">
       <div className="packet-detail-header">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
+        <BackButton onClick={onBack} />
         <h2>Packet Details</h2>
       </div>
 
@@ -499,25 +496,21 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
 
         <div className="packet-info-card">
           <h3>Basic Information</h3>
-          <div className="info-item">
-            <span className="info-label">Packet ID:</span>
-            <span className="info-value">{packet.id}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">From:</span>
-            <span className="info-value">
+          <InfoItem label="Packet ID" value={packet.id} />
+          <InfoItem label="From" value={
+            <>
               <button 
                 className="node-link"
                 onClick={() => onNodeClick(formatNodeId(packet.from_node_id))}
+                aria-label={`View details for ${getNodeName(packet.from_node_id)}`}
               >
                 {getNodeName(packet.from_node_id)}
               </button>
               <span className="node-hex">({formatNodeId(packet.from_node_id)})</span>
-            </span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">To:</span>
-            <span className="info-value">
+            </>
+          } />
+          <InfoItem label="To" value={
+            <>
               <button 
                 className="node-link"
                 onClick={() => onNodeClick(formatNodeId(packet.to_node_id))}
@@ -525,25 +518,13 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                 {getNodeName(packet.to_node_id)}
               </button>
               <span className="node-hex">({formatNodeId(packet.to_node_id)})</span>
-            </span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Channel:</span>
-            <span className="info-value">{packet.channel}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Port:</span>
-            <span className="info-value">{getPortNumName(packet.portnum.toString())}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Time:</span>
-            <span className="info-value">{formatLocalDateTime(packet.import_time)}</span>
-          </div>
+            </>
+          } />
+          <InfoItem label="Channel" value={packet.channel} />
+          <InfoItem label="Port" value={getPortNumName(packet.portnum.toString())} />
+          <InfoItem label="Time" value={formatLocalDateTime(packet.import_time)} />
           {packet.hop_start !== undefined && (
-            <div className="info-item">
-              <span className="info-label">Hop Limit:</span>
-              <span className="info-value">{packet.hop_start}</span>
-            </div>
+            <InfoItem label="Hop Limit" value={packet.hop_start} />
           )}
         </div>
 
@@ -594,7 +575,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                 <MapContainer
                   key={mapKey}
                   center={[centerLat, centerLng]}
-                  zoom={10}
+                  zoom={MAP_DEFAULT_ZOOM}
                   style={{ height: '100%', width: '100%' }}
                   closePopupOnClick={false}
                 >

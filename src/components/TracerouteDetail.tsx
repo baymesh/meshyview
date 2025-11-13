@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api';
-import { formatNodeId, formatLocalDateTime } from '../utils/portNames';
+import { formatNodeId, formatLocalDateTime, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
+import { ErrorState, BackButton, InfoItem } from './ui';
 
 interface TracerouteDetailProps {
   packetId: number;
@@ -58,17 +59,6 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
         setError(null);
         const result = await api.getTracerouteDetail(packetId);
         
-        // Debug: Log the raw data to see what we're getting
-        console.log('Traceroute API response:', result);
-        console.log('Number of traceroute records:', result.traceroutes.length);
-        result.traceroutes.forEach((tr, idx) => {
-          console.log(`Route ${idx + 1}:`, {
-            gateway: tr.gateway_node_id,
-            route: tr.route?.route || [],
-            routeLength: tr.route?.route?.length || 0
-          });
-        });
-        
         setData(result);
 
         // Get source and dest from the original packet
@@ -87,8 +77,7 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
   }, [packetId]);
 
   const getNodeName = (nodeId: number): string => {
-    if (!nodeLookup) return formatNodeId(nodeId);
-    return nodeLookup.getNodeName(nodeId);
+    return getNodeDisplayName(nodeId, nodeLookup);
   };
 
   // Deduplicate routes - group by identical path
@@ -312,7 +301,7 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '500px', gap: '1rem' }}>
         <div className="spinner" style={{ width: '40px', height: '40px', border: '4px solid var(--border-color)', borderTopColor: 'var(--primary-color)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-        <div style={{ color: 'var(--text-secondary)' }}>Loading traceroute details...</div>
+        <div style={{ color: 'var(--text-secondary)' }} role="status" aria-live="polite">Loading traceroute details...</div>
       </div>
     );
   }
@@ -320,8 +309,8 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
   if (error || !data) {
     return (
       <div className="traceroute-detail-error">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
-        <div className="error">{error || 'Traceroute data not found'}</div>
+        <BackButton onClick={onBack} />
+        <ErrorState message={error || 'Traceroute data not found'} />
       </div>
     );
   }
@@ -332,46 +321,40 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
   return (
     <div className="traceroute-detail">
       <div className="traceroute-detail-header">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
+        <BackButton onClick={onBack} />
         <h2>Traceroute Details</h2>
       </div>
 
       <div className="traceroute-detail-content">
         <div className="traceroute-summary">
           <h3>Summary</h3>
-          <div className="info-item">
-            <span className="info-label">Packet ID:</span>
-            <span className="info-value">{data.packet_id}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Unique Routes:</span>
-            <span className="info-value">{completedRoutes.length}</span>
-          </div>
+          <InfoItem label="Packet ID:" value={data.packet_id} />
+          <InfoItem label="Unique Routes:" value={completedRoutes.length} />
           {sourceNode && (
-            <div className="info-item">
-              <span className="info-label">Source:</span>
-              <span className="info-value">
+            <InfoItem 
+              label="Source:" 
+              value={
                 <button 
                   className="node-link"
                   onClick={() => onNodeClick(formatNodeId(sourceNode))}
                 >
                   {getNodeName(sourceNode)}
                 </button>
-              </span>
-            </div>
+              } 
+            />
           )}
           {destNode && (
-            <div className="info-item">
-              <span className="info-label">Destination:</span>
-              <span className="info-value">
+            <InfoItem 
+              label="Destination:" 
+              value={
                 <button 
                   className="node-link"
                   onClick={() => onNodeClick(formatNodeId(destNode))}
                 >
                   {getNodeName(destNode)}
                 </button>
-              </span>
-            </div>
+              } 
+            />
           )}
         </div>
 

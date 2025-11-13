@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { NodeLookup } from '../utils/nodeLookup';
-import { formatNodeId } from '../utils/portNames';
+import { formatNodeId, getNodeDisplayName } from '../utils/portNames';
 
 interface Neighbor {
   node_id: number;
@@ -37,8 +37,7 @@ export function NeighborInfoVisualization({
   channel 
 }: NeighborInfoVisualizationProps) {
   const getNodeName = (nodeId: number): string => {
-    if (!nodeLookup) return formatNodeId(nodeId);
-    return nodeLookup.getNodeName(nodeId);
+    return getNodeDisplayName(nodeId, nodeLookup);
   };
 
   const sortedNeighbors = useMemo(() => {

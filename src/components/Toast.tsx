@@ -20,7 +20,7 @@ export function Toast({ message, onClose, duration = 5000 }: ToastProps) {
       <div className="toast-content">
         <span className="toast-icon">ℹ️</span>
         <span className="toast-message">{message}</span>
-        <button className="toast-close" onClick={onClose}>×</button>
+        <button className="toast-close" onClick={onClose} aria-label="Close notification">×</button>
       </div>
     </div>
   );

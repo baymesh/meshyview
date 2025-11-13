@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { Stats, TopGateway } from '../types';
 import { getPortNumName } from '../utils/portNames';
 import { api } from '../api';
+import { LoadingState, ErrorState } from './ui';
 
 interface StatsDashboardProps {
   stats: Stats | null;
@@ -86,11 +87,11 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
 
   // Show initial loading state from parent
   if (initialLoading && !stats) {
-    return <div className="loading">Loading statistics...</div>;
+    return <LoadingState message="Loading statistics..." />;
   }
 
   if (!stats) {
-    return <div className="error">Failed to load statistics</div>;
+    return <ErrorState message="Failed to load statistics" />;
   }
 
   return (

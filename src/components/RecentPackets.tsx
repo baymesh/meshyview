@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../api';
 import type { Packet } from '../types';
-import { getPortNumName, formatLocalDateTime } from '../utils/portNames';
+import { getPortNumName, formatLocalDateTime, getNodeDisplayName } from '../utils/portNames';
 import type { NodeLookup } from '../utils/nodeLookup';
+import { DEFAULT_PACKET_LIMIT, BROADCAST_NODE_ID } from '../utils/constants';
+import { LoadingState, ErrorState } from './ui';
 
 interface RecentPacketsProps {
   nodeLookup: NodeLookup | null;
@@ -42,7 +44,7 @@ export function RecentPackets({
           channel?: string;
           days_active?: number;
         } = {
-          limit: 500,
+          limit: DEFAULT_PACKET_LIMIT,
           decode_payload: false,
           includeGatewayCount: true,
         };
@@ -69,10 +71,7 @@ export function RecentPackets({
   }, [selectedChannel, daysActive]);
 
   const getNodeName = (nodeId: number): string => {
-    if (!nodeLookup) {
-      return `!${nodeId.toString(16).padStart(8, '0')}`;
-    }
-    return nodeLookup.getNodeName(nodeId);
+    return getNodeDisplayName(nodeId, nodeLookup);
   };
 
   const handleNodeLinkClick = (nodeId: number) => {
@@ -81,7 +80,7 @@ export function RecentPackets({
   };
 
   const isClickableNode = (nodeId: number): boolean => {
-    return nodeId !== 0 && nodeId !== 0xffffffff;
+    return nodeId !== 0 && nodeId !== BROADCAST_NODE_ID;
   };
 
   const handleSort = (field: SortField) => {
@@ -137,7 +136,7 @@ export function RecentPackets({
   if (loading) {
     return (
       <div className="recent-packets">
-        <div className="loading">Loading packets...</div>
+        <LoadingState message="Loading packets..." />
       </div>
     );
   }
@@ -145,7 +144,7 @@ export function RecentPackets({
   if (error) {
     return (
       <div className="recent-packets">
-        <div className="error">Error: {error}</div>
+        <ErrorState message={`Error: ${error}`} />
       </div>
     );
   }
