@@ -14,6 +14,7 @@ import {
   MAP_HEIGHT_EXPANDED,
   DEFAULT_NEIGHBOR_DISPLAY_LIMIT
 } from '../utils/constants';
+import { LoadingState, ErrorState, BackButton, InfoItem } from './ui';
 
 const { BaseLayer } = LayersControl;
 
@@ -475,14 +476,14 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   }, [node?.id, node?.node_id, activeTab]);
 
   if (loading) {
-    return <div className="loading" role="status" aria-live="polite">Loading node details...</div>;
+    return <LoadingState message="Loading node details..." />;
   }
 
   if (error) {
     return (
       <div className="node-detail-error">
-        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
-        <div className="error" role="alert">{error}</div>
+        <BackButton onClick={onBack} />
+        <ErrorState message={error} />
       </div>
     );
   }
@@ -490,8 +491,8 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   if (!node) {
     return (
       <div className="node-detail-error">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
-        <div className="error">Node not found</div>
+        <BackButton onClick={onBack} />
+        <ErrorState message="Node not found" />
       </div>
     );
   }
@@ -643,53 +644,23 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   return (
     <div className="node-detail">
       <div className="node-detail-header">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
+        <BackButton onClick={onBack} />
         <h2>Node Details: {node.long_name}</h2>
       </div>
 
       <div className="node-info-cards">
         <div className="node-info-card">
           <h3>Basic Information</h3>
-          <div className="info-item">
-            <span className="info-label">Name:</span>
-            <span className="info-value">{node.long_name}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Short Name:</span>
-            <span className="info-value">{node.short_name}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">ID:</span>
-            <span className="info-value">{node.id}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Node ID:</span>
-            <span className="info-value">{node.node_id}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Relay ID:</span>
-            <span className="info-value">{node.node_id & 255}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Role:</span>
-            <span className="info-value">{node.role}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Hardware:</span>
-            <span className="info-value">{node.hw_model}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Firmware:</span>
-            <span className="info-value">{node.firmware || 'N/A'}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Channel:</span>
-            <span className="info-value">{node.channel}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Last Update:</span>
-            <span className="info-value">{formatLocalDateTime(node.last_update)}</span>
-          </div>
+          <InfoItem label="Name:" value={node.long_name} />
+          <InfoItem label="Short Name:" value={node.short_name} />
+          <InfoItem label="ID:" value={node.id} />
+          <InfoItem label="Node ID:" value={node.node_id} />
+          <InfoItem label="Relay ID:" value={node.node_id & 255} />
+          <InfoItem label="Role:" value={node.role} />
+          <InfoItem label="Hardware:" value={node.hw_model} />
+          <InfoItem label="Firmware:" value={node.firmware || 'N/A'} />
+          <InfoItem label="Channel:" value={node.channel} />
+          <InfoItem label="Last Update:" value={formatLocalDateTime(node.last_update)} />
         </div>
 
         {coordinates && (

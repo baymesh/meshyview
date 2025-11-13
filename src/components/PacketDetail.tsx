@@ -7,6 +7,7 @@ import type { NodeLookup } from '../utils/nodeLookup';
 import { TracerouteVisualization } from './TracerouteVisualization';
 import { NeighborInfoVisualization } from './NeighborInfoVisualization';
 import { parseTraceroutePayload } from '../utils/tracerouteParser';
+import { LoadingState, ErrorState, BackButton, InfoItem } from './ui';
 import { 
   COORDINATE_SCALE_FACTOR,
   MAP_DEFAULT_ZOOM
@@ -432,14 +433,14 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   };
 
   if (loading) {
-    return <div className="loading" role="status" aria-live="polite">Loading packet details...</div>;
+    return <LoadingState message="Loading packet details..." />;
   }
 
   if (error || !packet) {
     return (
       <div className="packet-detail-error">
-        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
-        <div className="error" role="alert">{error || 'Packet not found'}</div>
+        <BackButton onClick={onBack} />
+        <ErrorState message={error || 'Packet not found'} />
       </div>
     );
   }
@@ -447,7 +448,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   return (
     <div className="packet-detail">
       <div className="packet-detail-header">
-        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
+        <BackButton onClick={onBack} />
         <h2>Packet Details</h2>
       </div>
 
@@ -495,13 +496,9 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
 
         <div className="packet-info-card">
           <h3>Basic Information</h3>
-          <div className="info-item">
-            <span className="info-label">Packet ID:</span>
-            <span className="info-value">{packet.id}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">From:</span>
-            <span className="info-value">
+          <InfoItem label="Packet ID" value={packet.id} />
+          <InfoItem label="From" value={
+            <>
               <button 
                 className="node-link"
                 onClick={() => onNodeClick(formatNodeId(packet.from_node_id))}
@@ -510,11 +507,10 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                 {getNodeName(packet.from_node_id)}
               </button>
               <span className="node-hex">({formatNodeId(packet.from_node_id)})</span>
-            </span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">To:</span>
-            <span className="info-value">
+            </>
+          } />
+          <InfoItem label="To" value={
+            <>
               <button 
                 className="node-link"
                 onClick={() => onNodeClick(formatNodeId(packet.to_node_id))}
@@ -522,25 +518,13 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
                 {getNodeName(packet.to_node_id)}
               </button>
               <span className="node-hex">({formatNodeId(packet.to_node_id)})</span>
-            </span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Channel:</span>
-            <span className="info-value">{packet.channel}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Port:</span>
-            <span className="info-value">{getPortNumName(packet.portnum.toString())}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Time:</span>
-            <span className="info-value">{formatLocalDateTime(packet.import_time)}</span>
-          </div>
+            </>
+          } />
+          <InfoItem label="Channel" value={packet.channel} />
+          <InfoItem label="Port" value={getPortNumName(packet.portnum.toString())} />
+          <InfoItem label="Time" value={formatLocalDateTime(packet.import_time)} />
           {packet.hop_start !== undefined && (
-            <div className="info-item">
-              <span className="info-label">Hop Limit:</span>
-              <span className="info-value">{packet.hop_start}</span>
-            </div>
+            <InfoItem label="Hop Limit" value={packet.hop_start} />
           )}
         </div>
 
