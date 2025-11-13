@@ -239,7 +239,7 @@ export function MeshMap({
         (edge.source === nodeId && edge.target === selectedNodeId)
       );
       if (!isConnected) {
-        nodeOpacity = 0.5;
+        nodeOpacity = 0.1;
       }
     }
     
@@ -308,7 +308,7 @@ export function MeshMap({
                 if (involvesSelected) {
                   opacity = Math.min(opacity * 1.5, 1); // Boost opacity for connections involving selected node
                 } else {
-                  opacity *= 0.2; // Reduce opacity for other connections
+                  opacity *= 0.0; // Reduce opacity for other connections
                 }
               }
               
