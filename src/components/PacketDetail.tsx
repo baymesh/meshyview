@@ -109,6 +109,15 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
     hasShownNotification.current = false;
   }, [packetId]);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const fetchPacketDetail = async () => {
       try {
@@ -424,14 +433,14 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   };
 
   if (loading) {
-    return <div className="loading">Loading packet details...</div>;
+    return <div className="loading" role="status" aria-live="polite">Loading packet details...</div>;
   }
 
   if (error || !packet) {
     return (
       <div className="packet-detail-error">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
-        <div className="error">{error || 'Packet not found'}</div>
+        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
+        <div className="error" role="alert">{error || 'Packet not found'}</div>
       </div>
     );
   }
@@ -439,7 +448,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
   return (
     <div className="packet-detail">
       <div className="packet-detail-header">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
+        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
         <h2>Packet Details</h2>
       </div>
 
@@ -497,6 +506,7 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
               <button 
                 className="node-link"
                 onClick={() => onNodeClick(formatNodeId(packet.from_node_id))}
+                aria-label={`View details for ${getNodeName(packet.from_node_id)}`}
               >
                 {getNodeName(packet.from_node_id)}
               </button>

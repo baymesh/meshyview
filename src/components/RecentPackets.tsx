@@ -137,7 +137,7 @@ export function RecentPackets({
   if (loading) {
     return (
       <div className="recent-packets">
-        <div className="loading">Loading packets...</div>
+        <div className="loading" role="status" aria-live="polite">Loading packets...</div>
       </div>
     );
   }
@@ -145,7 +145,7 @@ export function RecentPackets({
   if (error) {
     return (
       <div className="recent-packets">
-        <div className="error">Error: {error}</div>
+        <div className="error" role="alert">Error: {error}</div>
       </div>
     );
   }

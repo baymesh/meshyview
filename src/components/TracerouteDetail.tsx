@@ -301,7 +301,7 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '500px', gap: '1rem' }}>
         <div className="spinner" style={{ width: '40px', height: '40px', border: '4px solid var(--border-color)', borderTopColor: 'var(--primary-color)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-        <div style={{ color: 'var(--text-secondary)' }}>Loading traceroute details...</div>
+        <div style={{ color: 'var(--text-secondary)' }} role="status" aria-live="polite">Loading traceroute details...</div>
       </div>
     );
   }
@@ -309,8 +309,8 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
   if (error || !data) {
     return (
       <div className="traceroute-detail-error">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
-        <div className="error">{error || 'Traceroute data not found'}</div>
+        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
+        <div className="error" role="alert">{error || 'Traceroute data not found'}</div>
       </div>
     );
   }
@@ -321,7 +321,7 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
   return (
     <div className="traceroute-detail">
       <div className="traceroute-detail-header">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
+        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
         <h2>Traceroute Details</h2>
       </div>
 

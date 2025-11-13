@@ -469,14 +469,14 @@ export function NodeDetail({ nodeId, nodeLookup, onBack, onPacketClick, onNodeCl
   }, [node?.id, node?.node_id, activeTab]);
 
   if (loading) {
-    return <div className="loading">Loading node details...</div>;
+    return <div className="loading" role="status" aria-live="polite">Loading node details...</div>;
   }
 
   if (error) {
     return (
       <div className="node-detail-error">
-        <button onClick={onBack} className="btn-secondary">← Back</button>
-        <div className="error">{error}</div>
+        <button onClick={onBack} className="btn-secondary" aria-label="Go back">← Back</button>
+        <div className="error" role="alert">{error}</div>
       </div>
     );
   }
