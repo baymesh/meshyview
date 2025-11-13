@@ -16,6 +16,7 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
   const [stats, setStats] = useState<Stats | null>(initialStats);
   const [loading, setLoading] = useState(false); // Don't show loading on initial render
   const [topGateways, setTopGateways] = useState<TopGateway[]>([]);
+  const [topDirectGateways, setTopDirectGateways] = useState<TopGateway[]>([]);
   const [gatewaysLoading, setGatewaysLoading] = useState(false);
 
   useEffect(() => {
@@ -57,26 +58,30 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
     const fetchTopGateways = async () => {
       try {
         setGatewaysLoading(true);
-        const params: { limit?: number; since?: string; channel?: string } = {
-          limit: 50,
-        };
         
         // Calculate 'since' timestamp based on globalDaysActive
-        if (globalDaysActive && globalDaysActive > 0) {
-          const since = new Date();
-          since.setDate(since.getDate() - globalDaysActive);
-          params.since = since.toISOString();
-        }
+        const since = globalDaysActive && globalDaysActive > 0 
+          ? new Date(Date.now() - globalDaysActive * 24 * 60 * 60 * 1000).toISOString()
+          : undefined;
         
-        if (globalChannel) {
-          params.channel = globalChannel;
-        }
+        const baseParams = {
+          limit: 50,
+          since,
+          channel: globalChannel,
+        };
         
-        const data = await api.getTopGateways(params);
-        setTopGateways(data.gateways);
+        // Fetch both all packets and direct-only gateways
+        const [allPacketsData, directOnlyData] = await Promise.all([
+          api.getTopGateways(baseParams),
+          api.getTopGateways({ ...baseParams, direct_only: true })
+        ]);
+        
+        setTopGateways(allPacketsData.gateways);
+        setTopDirectGateways(directOnlyData.gateways);
       } catch (err) {
         console.error('Error fetching top gateways:', err);
         setTopGateways([]);
+        setTopDirectGateways([]);
       } finally {
         setGatewaysLoading(false);
       }
@@ -177,6 +182,51 @@ export function StatsDashboard({ stats: initialStats, loading: initialLoading, g
                 </thead>
                 <tbody>
                   {topGateways.map((gateway, index) => (
+                    <tr key={gateway.node_id}>
+                      <td className="rank-col">{index + 1}</td>
+                      <td className="name-col">
+                        {onNodeClick ? (
+                          <button 
+                            className="node-link"
+                            onClick={() => onNodeClick(gateway.id)}
+                          >
+                            {gateway.long_name || gateway.short_name}
+                          </button>
+                        ) : (
+                          <span>{gateway.long_name || gateway.short_name}</span>
+                        )}
+                      </td>
+                      <td className="hw-col">{gateway.hw_model}</td>
+                      <td className="count-col">{gateway.packet_count.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="stat-item">
+              <span className="stat-label">No data available</span>
+            </div>
+          )}
+        </div>
+
+        <div className="stat-card stat-card-wide">
+          <h3>Top Direct Gateways (50)</h3>
+          {gatewaysLoading ? (
+            <div className="stat-loading">Loading...</div>
+          ) : topDirectGateways.length > 0 ? (
+            <div className="gateways-table-container">
+              <table className="gateways-list-table">
+                <thead>
+                  <tr>
+                    <th className="rank-col">#</th>
+                    <th className="name-col">Gateway</th>
+                    <th className="hw-col">Hardware</th>
+                    <th className="count-col">Packets</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topDirectGateways.map((gateway, index) => (
                     <tr key={gateway.node_id}>
                       <td className="rank-col">{index + 1}</td>
                       <td className="name-col">

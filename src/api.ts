@@ -208,6 +208,7 @@ export const api = {
     limit?: number;
     since?: string;
     channel?: string;
+    direct_only?: boolean;
   }): Promise<TopGatewaysResponse> {
     const url = buildApiUrl('/api/gateways/top', params);
     const response = await safeFetch(url, 'fetch top gateways');
