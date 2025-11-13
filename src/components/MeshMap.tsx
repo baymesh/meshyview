@@ -390,7 +390,7 @@ export function MeshMap({
           <div className="legend-item"><span className="legend-color" style={{backgroundColor: '#44ff44'}}></span> Client Base</div>
           <div className="legend-item"><span className="legend-color" style={{backgroundColor: '#ff44ff'}}></span> Repeater</div>
         </div>
-        {showConnections && (
+        {false && showConnections && (
           <div className="connection-legend">
             <h4>Connections:</h4>
             <div className="legend-items">
