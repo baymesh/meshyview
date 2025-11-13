@@ -25,7 +25,7 @@ export function parseTraceroutePayload(payloadHex: string): TracerouteData | nul
     // Convert hex string to byte array
     const bytes: number[] = [];
     for (let i = 0; i < payloadHex.length; i += 2) {
-      bytes.push(parseInt(payloadHex.substr(i, 2), 16));
+      bytes.push(parseInt(payloadHex.substring(i, i + 2), 16));
     }
 
     const route: number[] = [];

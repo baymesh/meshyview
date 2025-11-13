@@ -187,23 +187,15 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
     
     try {
       const neighbors = await api.getNodeNeighbors(gwNodeId);
-      const gwName = gw.node_name || getNodeName(gwNodeId);
-      
-      console.log(`[Relay Debug] Gateway: ${gwName} (${gwNodeId}, relay_node: ${gwRelayNode})`);
-      console.log(`  heard_from:`, neighbors.heard_from.map(n => `${n.node_id} (last byte: ${n.node_id & 255}, packets: ${n.packet_count})`));
-      console.log(`  heard_by:`, neighbors.heard_by.map(n => `${n.node_id} (last byte: ${n.node_id & 255}, packets: ${n.packet_count})`));
       
       // Prefer heard_from (nodes this gateway heard from), fallback to heard_by
       let matchingNeighbors = neighbors.heard_from
         .filter(n => (n.node_id & 255) === gwRelayNode);
       
-      console.log(`  heard_from matches:`, matchingNeighbors.map(n => `${n.node_id} (packets: ${n.packet_count})`));
-      
       if (matchingNeighbors.length === 0) {
         // Fallback to heard_by if nothing in heard_from
         matchingNeighbors = neighbors.heard_by
           .filter(n => (n.node_id & 255) === gwRelayNode);
-        console.log(`  heard_by matches (fallback):`, matchingNeighbors.map(n => `${n.node_id} (packets: ${n.packet_count})`));
       }
       
       if (matchingNeighbors.length > 0) {
@@ -211,15 +203,11 @@ export function PacketDetail({ packetId, nodeLookup, onBack, onNodeClick, onChan
         matchingNeighbors.sort((a, b) => b.packet_count - a.packet_count);
         const bestMatch = matchingNeighbors[0].node_id;
         
-        console.log(`  ✓ Selected best match: ${bestMatch} with ${matchingNeighbors[0].packet_count} packets`);
-        
         setRelayMatches(prev => {
           const updated = new Map(prev);
           updated.set(gwNodeId, [bestMatch]);
           return updated;
         });
-      } else {
-        console.log(`  ✗ No matches found!`);
       }
     } catch (err) {
       console.error(`Error fetching neighbors for node ${gwNodeId}:`, err);

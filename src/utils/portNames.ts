@@ -45,14 +45,27 @@ export function formatNodeId(nodeId: number): string {
 // Parse node ID from various formats: !22ac3144, 22ac3144, or 581710148
 // Returns the numeric node ID or null if invalid
 export function parseNodeId(nodeIdStr: string): number | null {
-  if (!nodeIdStr) return null;
+  // Validate input
+  if (!nodeIdStr || typeof nodeIdStr !== 'string') return null;
+  
+  // Trim whitespace and validate length
+  const trimmed = nodeIdStr.trim();
+  if (trimmed.length === 0 || trimmed.length > 20) return null;
   
   // Remove "!" prefix if present
-  const cleaned = nodeIdStr.startsWith('!') ? nodeIdStr.substring(1) : nodeIdStr;
+  const cleaned = trimmed.startsWith('!') ? trimmed.substring(1) : trimmed;
   
-  // Try parsing as hex (8 characters or less)
+  // Validate cleaned string is not empty
+  if (cleaned.length === 0) return null;
+  
+  // Try parsing as hex (1-8 characters)
   if (/^[0-9a-fA-F]{1,8}$/.test(cleaned)) {
-    return parseInt(cleaned, 16);
+    const num = parseInt(cleaned, 16);
+    // Validate result is a valid 32-bit unsigned integer
+    if (num >= 0 && num <= 0xFFFFFFFF) {
+      return num;
+    }
+    return null;
   }
   
   // Try parsing as decimal

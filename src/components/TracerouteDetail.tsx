@@ -58,17 +58,6 @@ export function TracerouteDetail({ packetId, nodeLookup, onBack, onNodeClick }: 
         setError(null);
         const result = await api.getTracerouteDetail(packetId);
         
-        // Debug: Log the raw data to see what we're getting
-        console.log('Traceroute API response:', result);
-        console.log('Number of traceroute records:', result.traceroutes.length);
-        result.traceroutes.forEach((tr, idx) => {
-          console.log(`Route ${idx + 1}:`, {
-            gateway: tr.gateway_node_id,
-            route: tr.route?.route || [],
-            routeLength: tr.route?.route?.length || 0
-          });
-        });
-        
         setData(result);
 
         // Get source and dest from the original packet

@@ -2,6 +2,68 @@ import type { NodesResponse, Stats, EdgesResponse, ChatResponse, TopGatewaysResp
 
 const API_BASE_URL = 'https://meshql.bayme.sh';
 
+// Custom error class for API errors
+class ApiError extends Error {
+  statusCode?: number;
+  isNetworkError: boolean;
+  
+  constructor(
+    message: string,
+    statusCode?: number,
+    isNetworkError: boolean = false
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.statusCode = statusCode;
+    this.isNetworkError = isNetworkError;
+  }
+}
+
+// Helper function to handle fetch errors with better messages
+async function handleApiResponse<T>(response: Response, operation: string): Promise<T> {
+  if (!response.ok) {
+    let errorMessage = `Failed to ${operation}`;
+    
+    // Provide more specific error messages based on status code
+    if (response.status === 404) {
+      errorMessage = `${operation}: Not found`;
+    } else if (response.status === 400) {
+      errorMessage = `${operation}: Invalid request`;
+    } else if (response.status === 429) {
+      errorMessage = `${operation}: Too many requests. Please try again later`;
+    } else if (response.status >= 500) {
+      errorMessage = `${operation}: Server error. Please try again later`;
+    } else if (response.status === 401 || response.status === 403) {
+      errorMessage = `${operation}: Access denied`;
+    } else {
+      errorMessage = `${operation}: ${response.statusText}`;
+    }
+    
+    throw new ApiError(errorMessage, response.status);
+  }
+  
+  try {
+    return await response.json();
+  } catch (err) {
+    throw new ApiError(`${operation}: Invalid response from server`, response.status);
+  }
+}
+
+// Helper function to wrap fetch with network error handling
+async function safeFetch(url: string, operation: string): Promise<Response> {
+  try {
+    const response = await fetch(url);
+    return response;
+  } catch (err) {
+    // Network error (no connection, DNS failure, etc.)
+    throw new ApiError(
+      `${operation}: Unable to connect to server. Please check your internet connection`,
+      undefined,
+      true
+    );
+  }
+}
+
 // Helper function to build API URLs with query parameters
 function buildApiUrl(endpoint: string, params?: Record<string, unknown>): string {
   const url = `${API_BASE_URL}${endpoint}`;
@@ -28,11 +90,8 @@ export const api = {
     limit?: number;
   }): Promise<NodesResponse> {
     const url = buildApiUrl('/api/nodes', params);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch nodes: ${response.statusText}`);
-    }
-    return response.json();
+    const response = await safeFetch(url, 'fetch nodes');
+    return handleApiResponse<NodesResponse>(response, 'fetch nodes');
   },
 
   async getStats(params?: {
@@ -40,11 +99,8 @@ export const api = {
     days_active?: number;
   }): Promise<Stats> {
     const url = buildApiUrl('/api/stats', params);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch stats: ${response.statusText}`);
-    }
-    return response.json();
+    const response = await safeFetch(url, 'fetch stats');
+    return handleApiResponse<Stats>(response, 'fetch stats');
   },
 
   async getEdges(params?: {
@@ -53,11 +109,8 @@ export const api = {
     channel?: string;
   }): Promise<EdgesResponse> {
     const url = buildApiUrl('/api/edges', params);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch edges: ${response.statusText}`);
-    }
-    return response.json();
+    const response = await safeFetch(url, 'fetch edges');
+    return handleApiResponse<EdgesResponse>(response, 'fetch edges');
   },
 
   async getChat(params?: {
@@ -67,11 +120,8 @@ export const api = {
     decode_payload?: boolean;
   }): Promise<ChatResponse> {
     const url = buildApiUrl('/api/chat', params);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch chat: ${response.statusText}`);
-    }
-    return response.json();
+    const response = await safeFetch(url, 'fetch chat messages');
+    return handleApiResponse<ChatResponse>(response, 'fetch chat messages');
   },
 
   async getPackets(params?: {
@@ -99,11 +149,8 @@ export const api = {
     gateway_count?: number;
   }> }> {
     const url = buildApiUrl('/api/packets', params);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch packets: ${response.statusText}`);
-    }
-    return response.json();
+    const response = await safeFetch(url, 'fetch packets');
+    return handleApiResponse(response, 'fetch packets');
   },
 
   async getPacketDetail(packetId: number, params?: {
@@ -119,20 +166,21 @@ export const api = {
     import_time: string;
     payload: string | { type: string; [key: string]: unknown };
     payload_hex?: string;
+    hop_start?: number;
+    hop_limit?: number;
     gateways?: Array<{
       node_id: number;
       node_name?: string;
-      rssi?: number;
-      snr?: number;
+      rx_rssi?: number;
+      rx_snr?: number;
+      hop_start?: number;
+      hop_limit?: number;
       relay_node?: number;
     }>;
   }> {
     const url = buildApiUrl(`/api/packets/${packetId}`, params);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch packet: ${response.statusText}`);
-    }
-    return response.json();
+    const response = await safeFetch(url, 'fetch packet details');
+    return handleApiResponse(response, 'fetch packet details');
   },
 
   async getTracerouteDetail(packetId: number): Promise<{
@@ -152,11 +200,8 @@ export const api = {
     }>;
   }> {
     const url = buildApiUrl(`/api/traceroutes/${packetId}`, { decode_payload: true });
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch traceroute: ${response.statusText}`);
-    }
-    return response.json();
+    const response = await safeFetch(url, 'fetch traceroute');
+    return handleApiResponse(response, 'fetch traceroute');
   },
 
   async getTopGateways(params?: {
@@ -165,19 +210,13 @@ export const api = {
     channel?: string;
   }): Promise<TopGatewaysResponse> {
     const url = buildApiUrl('/api/gateways/top', params);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch top gateways: ${response.statusText}`);
-    }
-    return response.json();
+    const response = await safeFetch(url, 'fetch top gateways');
+    return handleApiResponse<TopGatewaysResponse>(response, 'fetch top gateways');
   },
 
   async getNodeNeighbors(nodeId: number): Promise<NodeNeighborsResponse> {
     const url = `${API_BASE_URL}/api/nodes/${nodeId}/neighbors`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch node neighbors: ${response.statusText}`);
-    }
-    return response.json();
+    const response = await safeFetch(url, 'fetch node neighbors');
+    return handleApiResponse<NodeNeighborsResponse>(response, 'fetch node neighbors');
   },
 };
