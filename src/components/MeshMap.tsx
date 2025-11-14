@@ -230,9 +230,9 @@ export function MeshMap({
     const color = getRoleColor(role);
     const glowOpacity = getGlowOpacity(nodeId);
     
-    // Check if this node should be dimmed due to selection
+    // Only dim non-selected nodes if showConnections is true
     let nodeOpacity = 1;
-    if (selectedNodeId !== null && selectedNodeId !== nodeId) {
+    if (showConnections && selectedNodeId !== null && selectedNodeId !== nodeId) {
       // Check if this node is connected to the selected node
       const isConnected = connections.some(edge => 
         (edge.source === selectedNodeId && edge.target === nodeId) ||
